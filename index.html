@@ -146,44 +146,6 @@
           <p class="hint">Count every fish landed. Anything not marked as kept is reported as released.</p>
         </fieldset>
         <p class="readout" id="readout" aria-live="polite"></p>
-
-        <details class="more" id="more">
-          <summary>More detail (optional)</summary>
-          <div class="more-in">
-            <div class="field">
-              <label for="f-rods">Rods in the water</label>
-              <div class="stepper" data-min="1" data-max="60">
-                <button type="button" data-step="-1" aria-label="One fewer rod">−</button>
-                <input type="number" id="f-rods" inputmode="numeric" min="1" max="60" step="1" placeholder="Same as people">
-                <button type="button" data-step="1" aria-label="One more rod">+</button>
-              </div>
-            </div>
-            <details class="idhelp">
-              <summary>Cutthroat or rainbow?</summary>
-              <ul>
-                <li>Upper jaw bone reaches to or past the back of the eye.</li>
-                <li>Orange-red slash under the lower jaw. It starts showing at roughly 8 to 13 cm.</li>
-                <li>Small teeth behind the tongue (basibranchial). Rainbows lack them.</li>
-                <li>Cutthroat and rainbow or steelhead hybridise. If a fish is doubtful, say so below.</li>
-              </ul>
-            </details>
-            <div class="field"><span class="lab">Cutthroat ID check</span><div class="chips" data-key="idConf"></div></div>
-            <div class="field"><span class="lab">Cutthroat form</span><div class="chips" data-key="form"></div></div>
-            <div class="field"><span class="lab">Water level</span><div class="chips" data-key="level"></div></div>
-            <div class="field"><span class="lab">Water clarity</span><div class="chips" data-key="clarity"></div></div>
-            <div class="field"><label for="f-temp">Water temperature (°C)</label><input type="number" id="f-temp" inputmode="decimal" min="0" max="25" step="0.5"></div>
-            <div class="field">
-              <span class="lab">In a provincial park?</span>
-              <div class="chips" data-key="park"></div>
-              <div class="sub-fields" id="park-fields" hidden>
-                <input type="text" id="f-parkname" maxlength="80" placeholder="Park name" aria-label="Park name">
-                <input type="text" id="f-parkpermit" maxlength="40" placeholder="Angling Guides Park Permit number" aria-label="Park permit number">
-              </div>
-            </div>
-            <div class="field"><label for="f-run">Run or pool</label><input type="text" id="f-run" maxlength="60"></div>
-            <div class="field"><label for="f-notes">Comments</label><textarea id="f-notes" maxlength="600"></textarea><p class="hint">Goes into the BC report as your comments.</p></div>
-          </div>
-        </details>
       </div>
     </div>
     <div class="sheet-foot">

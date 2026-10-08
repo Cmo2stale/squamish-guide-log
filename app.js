@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.0.2';
+var APP_VERSION='1.1.0';
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -29,7 +29,7 @@ var RIVERS=[
 var RIVER_IDS=RIVERS.map(function(r){return r.id});
 function riverOf(id){return RIVERS.filter(function(r){return r.id===id})[0]||{id:id,name:id,short:id}}
 var SPECIES=[
-  {id:'cutthroat',name:'Cutthroat'},{id:'rainbow',name:'Rainbow trout'},{id:'steelhead',name:'Steelhead'},
+  {id:'rainbow',name:'Rainbow trout'},{id:'steelhead',name:'Steelhead'},{id:'cutthroat',name:'Cutthroat'},
   {id:'bull',name:'Bull trout'},{id:'sockeye',name:'Sockeye'},{id:'chum',name:'Chum'},
   {id:'chinook',name:'Spring salmon'},{id:'pink',name:'Pink'},{id:'coho',name:'Coho'}
 ];
@@ -37,14 +37,6 @@ var SP_IDS=SPECIES.map(function(x){return x.id});
 function spName(id){for(var i=0;i<SPECIES.length;i++){if(SPECIES[i].id===id)return SPECIES[i].name}return id}
 var RES=[{id:'bc',name:'B.C. residents'},{id:'nr',name:'Non-residents'},{id:'nra',name:'Non-resident aliens'}];
 var RES_IDS=['bc','nr','nra'];
-var OPTS={
-  idConf:[['checked','Slash and teeth checked'],['likely','Looks like cutthroat'],['doubt','Could be rainbow or hybrid']],
-  form:[['sea','Sea-run, bright silver'],['res','Resident'],['unk','Not sure']],
-  level:[['low','Low'],['mid','Normal'],['high','High']],
-  clarity:[['clear','Clear'],['tinge','Slight tinge'],['milky','Milky'],['blown','Blown out']],
-  park:[['yes','Yes'],['no','No']]
-};
-function lab(key,val){var o=OPTS[key]||[];for(var i=0;i<o.length;i++){if(o[i][0]===val)return o[i][1]}return ''}
 
 /* ---------- dates ---------- */
 function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -64,10 +56,7 @@ function norm(t){
   Object.keys(k).forEach(function(id){if(k[id]>(c[id]||0)){if(c[id])k[id]=c[id];else delete k[id]}});
   var g=t.gps&&isFinite(t.gps.lat)&&isFinite(t.gps.lon)?{lat:+t.gps.lat,lon:+t.gps.lon,acc:num(t.gps.acc),at:num(t.gps.at)}:null;
   return {id:String(t.id),date:typeof t.date==='string'?t.date:'',river:t.river,hours:num(t.hours),people:people,res:res,
-    rods:t.rods?Math.max(1,Math.floor(num(t.rods,people))):people,rodsGiven:!!t.rods,c:c,k:k,gps:g,
-    idConf:t.idConf||'',form:t.form||'',level:t.level||'',clarity:t.clarity||'',
-    tempC:(t.tempC===undefined||t.tempC===null||t.tempC==='')?null:num(t.tempC),
-    park:t.park||'',parkName:t.parkName||'',parkPermit:t.parkPermit||'',run:t.run||'',notes:t.notes||'',
+    c:c,k:k,gps:g,
     createdAt:num(t.createdAt),updatedAt:num(t.updatedAt)};
 }
 function valid(t){return t&&t.id&&RIVER_IDS.indexOf(t.river)>-1&&/^\d{4}-\d{2}-\d{2}$/.test(t.date)}
@@ -80,7 +69,7 @@ function fmtNum(n){return Number.isInteger(n)?String(n):n.toFixed(1)}
 function r1(n){return fmtNum(Math.round(n*10)/10)}
 function plural(n,w,p){return n+' '+(n===1?w:(p||w+'s'))}
 function catchText(t){return SPECIES.filter(function(x){return t.c[x.id]}).map(function(x){return x.name+' '+t.c[x.id]+(t.k[x.id]?' ('+t.k[x.id]+' kept)':'')}).join(', ')}
-function resText(t){return RES.filter(function(x){return t.res[x.id]}).map(function(x){return t.res[x.id]+' '+x.name.replace('B.C.','B.C.').toLowerCase().replace('b.c.','B.C.')}).join(', ')}
+function resText(t){var one={bc:'B.C. resident',nr:'non-resident',nra:'non-resident alien'};return RES.filter(function(x){return t.res[x.id]}).map(function(x){return t.res[x.id]+' '+one[x.id]+(t.res[x.id]===1?'':'s')}).join(', ')}
 function gpsText(g){return g.lat.toFixed(5)+', '+g.lon.toFixed(5)+(g.acc?' (±'+Math.round(g.acc)+' m)':'')}
 
 /* ---------- state ---------- */
@@ -104,13 +93,6 @@ function detail(t){
   add('Hours fished',r1(t.hours)+' h · '+r1(ah(t))+' angler-hours');
   add('Catch',catchText(t)||'No fish');
   if(t.gps)add('Location',esc(gpsText(t.gps))+' · <a href="https://www.google.com/maps/search/?api=1&query='+t.gps.lat.toFixed(6)+','+t.gps.lon.toFixed(6)+'" target="_blank" rel="noopener">Map</a>',true);
-  add('Rods',t.rodsGiven?String(t.rods):'');
-  add('Cutthroat ID check',lab('idConf',t.idConf));
-  add('Cutthroat form',lab('form',t.form));
-  add('Water',[lab('level',t.level)&&lab('level',t.level)+' level',lab('clarity',t.clarity),t.tempC!==null?t.tempC+' °C':''].filter(Boolean).join(' · '));
-  add('Provincial park',t.park==='yes'?[t.parkName||'Yes',t.parkPermit&&'permit '+t.parkPermit].filter(Boolean).join(' · '):'');
-  add('Run or pool',t.run);
-  add('Comments',t.notes);
   return '<div class="e-body"><dl>'+rows.join('')+'</dl><div class="e-actions"><button type="button" data-act="edit" data-id="'+esc(t.id)+'">Edit</button><button type="button" data-act="copy" data-id="'+esc(t.id)+'">Log another like this</button><button type="button" class="danger" data-act="del" data-id="'+esc(t.id)+'">Delete</button></div></div>';
 }
 function renderTrips(){
@@ -118,11 +100,11 @@ function renderTrips(){
   $('#tr-sub').textContent=list.length?plural(list.length,'trip')+' on this phone':'';
   if(!list.length){el.innerHTML='<p class="empty" style="padding-top:14px">No trips yet. Tap “Log a trip” when you\'re off the water. A day with no fish counts too.</p>';$('#moreBtn').hidden=true;return}
   el.innerHTML=list.slice(0,shown).map(function(t){
-    var cut=cnt(t,'cutthroat'),any=totalCaught(t);
-    var pill=cut>0?'<span class="pill hit">'+cut+' cutthroat</span>':(any>0?'<span class="pill blank">No cutthroat</span>':'<span class="pill blank">No fish</span>');
+    var any=totalCaught(t);
+    var pill=any>0?'<span class="pill hit">'+plural(any,'fish','fish')+'</span>':'<span class="pill blank">No fish</span>';
     var bits=[riverOf(t.river).short,plural(t.people,'person','people')+' · '+r1(t.hours)+' h'];
-    if(any>cut)bits.push((any-cut)+' other fish');
-    if(t.run)bits.push(t.run);
+    var sp=SPECIES.filter(function(x){return t.c[x.id]}).map(function(x){return x.name+' '+t.c[x.id]});
+    if(sp.length)bits.push(sp.join(', '));
     return '<details class="entry" data-id="'+esc(t.id)+'"'+(openIds[t.id]?' open':'')+'><summary><div class="e-main"><div class="e-date">'+esc(fmtDate(t.date,true))+'</div><div class="e-sub">'+esc(bits.join(' · '))+'</div></div><div>'+pill+'</div></summary>'+detail(t)+'</details>';
   }).join('');
   $('#moreBtn').hidden=list.length<=shown;
@@ -151,14 +133,14 @@ function renderReport(){
   var days={},people=0,hrs=0,caught={},kept={},byR={};
   list.forEach(function(t){
     days[t.date]=1;people+=t.people;hrs+=ah(t);
-    var r=byR[t.river]||(byR[t.river]={n:0,ah:0,cut:0,all:0});r.n++;r.ah+=ah(t);r.cut+=cnt(t,'cutthroat');r.all+=totalCaught(t);
+    var r=byR[t.river]||(byR[t.river]={n:0,ah:0,all:0});r.n++;r.ah+=ah(t);r.all+=totalCaught(t);
     SP_IDS.forEach(function(id){if(t.c[id])caught[id]=(caught[id]||0)+t.c[id];if(t.k[id])kept[id]=(kept[id]||0)+t.k[id]});
   });
   var sp=SPECIES.filter(function(x){return caught[x.id]}).map(function(x){var kp=kept[x.id]||0;return '<tr><td>'+esc(x.name)+'</td><td>'+(caught[x.id]-kp)+'</td><td>'+kp+'</td><td class="rate">'+(caught[x.id]/hrs).toFixed(2)+'</td></tr>'}).join('');
-  var rv=RIVERS.filter(function(r){return byR[r.id]}).map(function(r){var x=byR[r.id];return '<tr><td>'+esc(r.short)+'</td><td>'+x.n+'</td><td>'+r1(x.ah)+'</td><td>'+x.cut+'</td><td class="rate">'+(x.ah?(x.cut/x.ah).toFixed(2):'–')+'</td></tr>'}).join('');
+  var rv=RIVERS.filter(function(r){return byR[r.id]}).map(function(r){var x=byR[r.id];return '<tr><td>'+esc(r.short)+'</td><td>'+x.n+'</td><td>'+r1(x.ah)+'</td><td>'+x.all+'</td><td class="rate">'+(x.ah?(x.all/x.ah).toFixed(2):'–')+'</td></tr>'}).join('');
   el.innerHTML='<ul class="facts"><li><b>'+Object.keys(days).length+'</b> guided '+(Object.keys(days).length===1?'day':'days')+' · <b>'+list.length+'</b> '+(list.length===1?'group':'groups')+' · <b>'+people+'</b> anglers · <b>'+r1(hrs)+'</b> angler-hours</li></ul>'+
     (sp?'<div class="tablewrap"><table class="dt"><thead><tr><th>Species</th><th>Released</th><th>Kept</th><th>Per hr</th></tr></thead><tbody>'+sp+'</tbody></table></div>':'<p class="empty" style="margin-top:12px">No fish logged this licence year.</p>')+
-    '<h3 class="subh">Cutthroat by river</h3><div class="tablewrap"><table class="dt"><thead><tr><th>River</th><th>Trips</th><th>Ang-hrs</th><th>Cutt</th><th>Per hr</th></tr></thead><tbody>'+rv+'</tbody></table></div>';
+    '<h3 class="subh">By river</h3><div class="tablewrap"><table class="dt"><thead><tr><th>River</th><th>Trips</th><th>Ang-hrs</th><th>Fish</th><th>Per hr</th></tr></thead><tbody>'+rv+'</tbody></table></div>';
 }
 function renderSettings(){
   if(document.activeElement!==$('#s-guide'))$('#s-guide').value=settings.guide||'';
@@ -186,19 +168,9 @@ function buildForm(){
   $('#f-rivers').innerHTML=RIVERS.map(function(r){return '<label><input type="radio" name="river" value="'+r.id+'"><span>'+esc(r.name)+'</span></label>'}).join('');
   $('#res-rows').innerHTML=RES.map(function(x){return '<div class="row"><span>'+esc(x.name)+'</span>'+stepperHtml('r-'+x.id,0,'sm',0,60,x.name)+'</div>'}).join('');
   $('#sp-grid').innerHTML=SPECIES.map(function(x,i){
-    return '<div class="row'+(i===0?' primary-sp':'')+'"><span>'+esc(x.name)+'</span>'+stepperHtml('c-'+x.id,0,'sm',0,500,x.name+' caught')+
+    return '<div class="row"><span>'+esc(x.name)+'</span>'+stepperHtml('c-'+x.id,0,'sm',0,500,x.name+' caught')+
       '<div class="kept"><span>of which kept</span>'+stepperHtml('k-'+x.id,0,'sm',0,500,x.name+' kept')+'</div></div>';
   }).join('');
-  $$('.chips[data-key]').forEach(function(box){
-    var key=box.getAttribute('data-key');
-    box.innerHTML=OPTS[key].map(function(o){return '<button type="button" class="chip" data-v="'+esc(o[0])+'" aria-pressed="false">'+esc(o[1])+'</button>'}).join('');
-  });
-}
-function setChips(key,val){
-  sel[key]=val?[val]:[];
-  var box=$('.chips[data-key="'+key+'"]');
-  $$('.chip',box).forEach(function(b){b.setAttribute('aria-pressed',String(sel[key].indexOf(b.getAttribute('data-v'))>-1))});
-  if(key==='park')$('#park-fields').hidden=sel.park[0]!=='yes';
 }
 function setKeptMode(on){keptMode=on;$('#sp-grid').classList.toggle('keptmode',on);$('#keptToggle').setAttribute('aria-pressed',String(on))}
 function find(id){return all().filter(function(x){return x.id===id})[0]||null}
@@ -216,15 +188,6 @@ function openSheet(id,copyFrom){
   $('#f-hours').value=t?t.hours:'';
   SP_IDS.forEach(function(k){$('#c-'+k).value=t?(t.c[k]||0):0;$('#k-'+k).value=t?(t.k[k]||0):0});
   setKeptMode(!!t&&sum(t.k)>0);
-  $('#f-rods').value=t&&t.rodsGiven?t.rods:'';
-  $('#f-temp').value=t&&t.tempC!==null?t.tempC:'';
-  $('#f-run').value=src?src.run:'';
-  $('#f-notes').value=t?t.notes:'';
-  $('#f-parkname').value=src?src.parkName:'';
-  $('#f-parkpermit').value=src?src.parkPermit:'';
-  ['idConf','form'].forEach(function(k){setChips(k,t?t[k]:'')});
-  ['level','clarity','park'].forEach(function(k){setChips(k,src?src[k]:'')});
-  $('#more').open=!!src&&!!(src.rodsGiven||src.idConf||src.form||src.level||src.clarity||src.tempC!==null||src.park||src.run||src.notes);
   formGps=t?t.gps:null;stopGps();renderGps();
   updateReadout();
   opener=document.activeElement;
@@ -244,11 +207,11 @@ function newId(){
 function val(id){return parseInt($('#'+id).value,10)||0}
 function updateReadout(){
   var el=$('#readout');
-  var h=parseFloat($('#f-hours').value),people=val('r-bc')+val('r-nr')+val('r-nra'),cut=val('c-cutthroat'),tot=0;
+  var h=parseFloat($('#f-hours').value),people=val('r-bc')+val('r-nr')+val('r-nra'),tot=0;
   SP_IDS.forEach(function(k){var n=val('c-'+k);tot+=n;var row=$('#c-'+k).closest('.row');row.classList.toggle('has',n>0)});
   if(!(h>0)||!(people>0)){el.textContent=people>0?'Enter hours fished to see catch per angler-hour.':'Add the people fishing to see catch per angler-hour.';return}
   var a=h*people;
-  el.innerHTML=plural(people,'person','people')+' · <b>'+r1(a)+'</b> angler-hours<br>Cutthroat <b>'+(cut/a).toFixed(2)+'</b> per angler-hour'+(tot>cut?' · all species <b>'+(tot/a).toFixed(2)+'</b>':'');
+  el.innerHTML=plural(people,'person','people')+' · <b>'+r1(a)+'</b> angler-hours<br>'+plural(tot,'fish','fish')+' · <b>'+(tot/a).toFixed(2)+'</b> per angler-hour';
 }
 
 /* ---------- GPS ---------- */
@@ -307,12 +270,6 @@ function readForm(){
   var t={id:editingId||newId(),date:date,river:rv.value,hours:hours,res:res,c:c,v:1};
   if(Object.keys(k).length)t.k=k;
   if(formGps)t.gps=formGps;
-  var rods=parseInt($('#f-rods').value,10);if(rods>0)t.rods=Math.min(rods,60);
-  var tp=parseFloat($('#f-temp').value);if(!isNaN(tp))t.tempC=tp;
-  ['idConf','form','level','clarity','park'].forEach(function(key){if(sel[key]&&sel[key][0])t[key]=sel[key][0]});
-  function opt(key,v){if(v)t[key]=v}
-  if(t.park==='yes'){opt('parkName',$('#f-parkname').value.trim());opt('parkPermit',$('#f-parkpermit').value.trim())}
-  opt('run',$('#f-run').value.trim());opt('notes',$('#f-notes').value.trim());
   return t;
 }
 function onSubmit(e){
@@ -350,14 +307,13 @@ async function deliver(filename,text,mime){
   return true;
 }
 function bcRows(list){
-  var head=['Date (yyyy-mm-dd)','Waterbody','B.C. residents','Non-residents','Non-resident aliens','In provincial park','Park name','Park permit number'];
+  var head=['Date (yyyy-mm-dd)','Waterbody','B.C. residents','Non-residents','Non-resident aliens'];
   SPECIES.forEach(function(x){head.push(x.name+' released');head.push(x.name+' kept')});
-  head.push('Comments');
   var rows=[head];
   list.forEach(function(t){
-    var r=[t.date,riverOf(t.river).name,t.res.bc||0,t.res.nr||0,t.res.nra||0,t.park==='yes'?'Yes':'No',t.parkName,t.parkPermit];
+    var r=[t.date,riverOf(t.river).name,t.res.bc||0,t.res.nr||0,t.res.nra||0];
     SPECIES.forEach(function(x){var c=t.c[x.id]||0,k=t.k[x.id]||0;r.push(c-k);r.push(k)});
-    r.push(t.notes);rows.push(r);
+    rows.push(r);
   });
   return rows;
 }
@@ -366,16 +322,16 @@ function exportBC(){
   deliver('bc-guide-report-'+slug(settings.guide)+'-'+lyear+'-'+String(lyear+1).slice(2)+'.csv',toCsv(bcRows(list)),'text/csv');
 }
 function allRows(list){
-  var head=['date','river','run_or_pool','latitude','longitude','gps_accuracy_m','hours_fished','people_fishing','bc_residents','non_residents','non_resident_aliens','angler_hours','rods'];
+  var head=['date','river','latitude','longitude','gps_accuracy_m','hours_fished','people_fishing','bc_residents','non_residents','non_resident_aliens','angler_hours'];
   SPECIES.forEach(function(x){head.push(x.id+'_caught');head.push(x.id+'_kept')});
-  head=head.concat(['cutthroat_per_angler_hour','all_species_per_angler_hour','cutthroat_id_check','cutthroat_form','water_level','clarity','water_temp_c','in_provincial_park','park_name','park_permit','comments','guide','guide_licence']);
+  head=head.concat(['total_fish','fish_per_angler_hour','guide','guide_licence']);
   var rows=[head];
   function q(n,d){return d>0?Math.round(1000*n/d)/1000:''}
   list.forEach(function(t){
     var g=t.gps;
-    var r=[t.date,riverOf(t.river).name,t.run,g?g.lat.toFixed(6):'',g?g.lon.toFixed(6):'',g&&g.acc?Math.round(g.acc):'',t.hours,t.people,t.res.bc||0,t.res.nr||0,t.res.nra||0,Math.round(ah(t)*100)/100,t.rodsGiven?t.rods:''];
+    var r=[t.date,riverOf(t.river).name,g?g.lat.toFixed(6):'',g?g.lon.toFixed(6):'',g&&g.acc?Math.round(g.acc):'',t.hours,t.people,t.res.bc||0,t.res.nr||0,t.res.nra||0,Math.round(ah(t)*100)/100];
     SPECIES.forEach(function(x){r.push(t.c[x.id]||0);r.push(t.k[x.id]||0)});
-    r=r.concat([q(cnt(t,'cutthroat'),ah(t)),q(totalCaught(t),ah(t)),lab('idConf',t.idConf),lab('form',t.form),lab('level',t.level),lab('clarity',t.clarity),t.tempC===null?'':t.tempC,t.park==='yes'?'Yes':'No',t.parkName,t.parkPermit,t.notes,settings.guide,settings.licence]);
+    r=r.concat([totalCaught(t),q(totalCaught(t),ah(t)),settings.guide,settings.licence]);
     rows.push(r);
   });
   return rows;
@@ -463,8 +419,6 @@ function bind(){
       var v=parseInt(inp.value,10);if(isNaN(v))v=min-(+st.getAttribute('data-step')>0?1:0);
       inp.value=Math.min(max,Math.max(min,v+parseInt(st.getAttribute('data-step'),10)));updateReadout();return;
     }
-    var ch=e.target.closest('.chips[data-key] .chip');
-    if(ch){var key=ch.closest('.chips').getAttribute('data-key'),v2=ch.getAttribute('data-v');setChips(key,(sel[key]||[])[0]===v2?'':v2)}
   });
   $('#entries').addEventListener('toggle',function(e){var d=e.target;if(d.classList&&d.classList.contains('entry')){var id=d.getAttribute('data-id');if(d.open)openIds[id]=1;else delete openIds[id]}},true);
   $('#entries').addEventListener('click',function(e){

@@ -1,6 +1,6 @@
 # Squamish Guide Log
 
-An offline trip logbook for fishing guides on the Squamish, Ashlu, Mamquam, Cheakamus and Elaho rivers. It's built by Riverside Solutions Inc. for coastal cutthroat conservation.
+An offline trip logbook for fishing guides on the Squamish, Ashlu, Mamquam, Cheakamus and Elaho rivers. Built by Riverside Solutions Inc.
 
 **Open the app:** https://cmo2stale.github.io/squamish-guide-log/
 
@@ -20,7 +20,7 @@ After each trip, tap **Log a trip** and fill in:
 
 The phone's GPS location is saved with each trip. You can log several trips in a day.
 
-At the end of the licence year (April to March), tap **Export for the BC report**. You get a CSV with one row per group, laid out in the same order as the province's Freshwater Angling Guide Report web form. **Full trip spreadsheet** exports everything, including GPS and water conditions.
+At the end of the licence year (April to March), tap **Export for the BC report**. You get a CSV with one row per group, laid out in the same order as the province's Freshwater Angling Guide Report web form. **Full trip spreadsheet** exports every trip, including GPS location.
 
 ## Your data
 
