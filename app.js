@@ -1,0 +1,496 @@
+/* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
+(function(){
+'use strict';
+var APP_VERSION='1.0.1';
+var $=function(s,r){return (r||document).querySelector(s)};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+
+/* ---------- storage ---------- */
+var K_TRIPS='sgl_trips',K_SET='sgl_settings';
+var storageOk=true;
+function lsGet(k){try{return localStorage.getItem(k)}catch(e){storageOk=false;return null}}
+function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(e){storageOk=false;return false}}
+function loadJSON(k,d){try{var v=JSON.parse(lsGet(k)||'null');return v==null?d:v}catch(e){return d}}
+var trips=loadJSON(K_TRIPS,[]);if(!Array.isArray(trips))trips=[];
+var settings=Object.assign({guide:'',licence:'',gps:'auto',lastBackup:0,lastBc:2},loadJSON(K_SET,{}));
+function saveTrips(){var ok=lsSet(K_TRIPS,JSON.stringify(trips));if(!ok)toast('Could not save on this phone. Storage may be full or blocked.');return ok}
+function saveSettings(){lsSet(K_SET,JSON.stringify(settings))}
+function askPersist(){try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}}
+
+/* ---------- reference data ---------- */
+var RIVERS=[
+  {id:'squamish',name:'Squamish River',short:'Squamish'},
+  {id:'ashlu',name:'Ashlu River',short:'Ashlu'},
+  {id:'mamquam',name:'Mamquam River',short:'Mamquam'},
+  {id:'cheakamus',name:'Cheakamus River',short:'Cheakamus'},
+  {id:'elaho',name:'Elaho River',short:'Elaho'}
+];
+var RIVER_IDS=RIVERS.map(function(r){return r.id});
+function riverOf(id){return RIVERS.filter(function(r){return r.id===id})[0]||{id:id,name:id,short:id}}
+var SPECIES=[
+  {id:'cutthroat',name:'Cutthroat'},{id:'rainbow',name:'Rainbow trout'},{id:'steelhead',name:'Steelhead'},
+  {id:'bull',name:'Bull trout'},{id:'sockeye',name:'Sockeye'},{id:'chum',name:'Chum'},
+  {id:'chinook',name:'Spring salmon'},{id:'pink',name:'Pink'},{id:'coho',name:'Coho'}
+];
+var SP_IDS=SPECIES.map(function(x){return x.id});
+function spName(id){for(var i=0;i<SPECIES.length;i++){if(SPECIES[i].id===id)return SPECIES[i].name}return id}
+var RES=[{id:'bc',name:'B.C. residents'},{id:'nr',name:'Non-residents'},{id:'nra',name:'Non-resident aliens'}];
+var RES_IDS=['bc','nr','nra'];
+var OPTS={
+  idConf:[['checked','Slash and teeth checked'],['likely','Looks like cutthroat'],['doubt','Could be rainbow or hybrid']],
+  form:[['sea','Sea-run, bright silver'],['res','Resident'],['unk','Not sure']],
+  level:[['low','Low'],['mid','Normal'],['high','High']],
+  clarity:[['clear','Clear'],['tinge','Slight tinge'],['milky','Milky'],['blown','Blown out']],
+  park:[['yes','Yes'],['no','No']]
+};
+function lab(key,val){var o=OPTS[key]||[];for(var i=0;i<o.length;i++){if(o[i][0]===val)return o[i][1]}return ''}
+
+/* ---------- dates ---------- */
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function todayStr(){return ymd(new Date())}
+function fmtDate(s,withDow){var p=s.split('-').map(Number);var dt=new Date(p[0],p[1]-1,p[2]);var o={day:'numeric',month:'short'};if(withDow)o.weekday='short';if(p[0]!==new Date().getFullYear())o.year='numeric';return dt.toLocaleDateString('en-CA',o)}
+function licenceStart(s){var y=+s.slice(0,4),m=+s.slice(5,7);return m>=4?y:y-1}
+function lyLabel(y){return y+'–'+String(y+1).slice(2)}
+
+/* ---------- model ---------- */
+function num(x,d){var n=Number(x);return isFinite(n)?n:(d||0)}
+function ints(o,ids){var r={};ids.forEach(function(id){var n=Math.max(0,Math.floor(num(o&&o[id])));if(n)r[id]=Math.min(n,500)});return r}
+function sum(o){var n=0;Object.keys(o).forEach(function(k){n+=o[k]});return n}
+function norm(t){
+  var res=ints(t.res,RES_IDS),people=sum(res);
+  if(!people){res={bc:1};people=1}
+  var c=ints(t.c,SP_IDS),k=ints(t.k,SP_IDS);
+  Object.keys(k).forEach(function(id){if(k[id]>(c[id]||0)){if(c[id])k[id]=c[id];else delete k[id]}});
+  var g=t.gps&&isFinite(t.gps.lat)&&isFinite(t.gps.lon)?{lat:+t.gps.lat,lon:+t.gps.lon,acc:num(t.gps.acc),at:num(t.gps.at)}:null;
+  return {id:String(t.id),date:typeof t.date==='string'?t.date:'',river:t.river,hours:num(t.hours),people:people,res:res,
+    rods:t.rods?Math.max(1,Math.floor(num(t.rods,people))):people,rodsGiven:!!t.rods,c:c,k:k,gps:g,
+    idConf:t.idConf||'',form:t.form||'',level:t.level||'',clarity:t.clarity||'',
+    tempC:(t.tempC===undefined||t.tempC===null||t.tempC==='')?null:num(t.tempC),
+    park:t.park||'',parkName:t.parkName||'',parkPermit:t.parkPermit||'',run:t.run||'',notes:t.notes||'',
+    createdAt:num(t.createdAt),updatedAt:num(t.updatedAt)};
+}
+function valid(t){return t&&t.id&&RIVER_IDS.indexOf(t.river)>-1&&/^\d{4}-\d{2}-\d{2}$/.test(t.date)}
+function all(){return trips.map(norm).filter(valid)}
+function sorted(){return all().sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:b.createdAt-a.createdAt})}
+function cnt(t,sp){return t.c[sp]||0}
+function totalCaught(t){return sum(t.c)}
+function ah(t){return t.hours*t.people}
+function fmtNum(n){return Number.isInteger(n)?String(n):n.toFixed(1)}
+function r1(n){return fmtNum(Math.round(n*10)/10)}
+function plural(n,w,p){return n+' '+(n===1?w:(p||w+'s'))}
+function catchText(t){return SPECIES.filter(function(x){return t.c[x.id]}).map(function(x){return x.name+' '+t.c[x.id]+(t.k[x.id]?' ('+t.k[x.id]+' kept)':'')}).join(', ')}
+function resText(t){return RES.filter(function(x){return t.res[x.id]}).map(function(x){return t.res[x.id]+' '+x.name.replace('B.C.','B.C.').toLowerCase().replace('b.c.','B.C.')}).join(', ')}
+function gpsText(g){return g.lat.toFixed(5)+', '+g.lon.toFixed(5)+(g.acc?' (±'+Math.round(g.acc)+' m)':'')}
+
+/* ---------- state ---------- */
+var shown=20,openIds={},editingId=null,sel={},toastTimer=null,opener=null,lyear=null;
+var currentDay=todayStr(),dateTouched=false,keptMode=false,formGps=null,gpsBusy=false,gpsWatch=null;
+var deferredInstall=null,swWaiting=null;
+
+/* ---------- render ---------- */
+function render(){renderNotice();renderTrips();renderReport();renderSettings()}
+function renderNotice(){
+  var el=$('#notice'),html='',list=all();
+  if(!storageOk)html='<p>This browser is blocking storage, so trips cannot be saved. Turn off private browsing, or open the app from your home screen.</p>';
+  else if(swWaiting)html='<p>A new version of the app is ready.</p><button type="button" data-act="update">Update now</button>';
+  else if(list.length>=5&&(!settings.lastBackup||Date.now()-settings.lastBackup>30*864e5))html='<p>'+(settings.lastBackup?'Your last backup was over a month ago.':'You haven\'t saved a backup yet.')+' Your trips live only on this phone.</p><button type="button" data-act="backup">Save a backup</button>';
+  el.innerHTML=html;el.hidden=!html;
+}
+function detail(t){
+  var rows=[];
+  function add(k,v,raw){if(v!==undefined&&v!==null&&v!=='')rows.push('<div><dt>'+k+'</dt><dd>'+(raw?v:esc(v))+'</dd></div>')}
+  add('People fishing',t.people+' ('+resText(t)+')');
+  add('Hours fished',r1(t.hours)+' h · '+r1(ah(t))+' angler-hours');
+  add('Catch',catchText(t)||'No fish');
+  if(t.gps)add('Location',esc(gpsText(t.gps))+' · <a href="https://www.google.com/maps/search/?api=1&query='+t.gps.lat.toFixed(6)+','+t.gps.lon.toFixed(6)+'" target="_blank" rel="noopener">Map</a>',true);
+  add('Rods',t.rodsGiven?String(t.rods):'');
+  add('Cutthroat ID check',lab('idConf',t.idConf));
+  add('Cutthroat form',lab('form',t.form));
+  add('Water',[lab('level',t.level)&&lab('level',t.level)+' level',lab('clarity',t.clarity),t.tempC!==null?t.tempC+' °C':''].filter(Boolean).join(' · '));
+  add('Provincial park',t.park==='yes'?[t.parkName||'Yes',t.parkPermit&&'permit '+t.parkPermit].filter(Boolean).join(' · '):'');
+  add('Run or pool',t.run);
+  add('Comments',t.notes);
+  return '<div class="e-body"><dl>'+rows.join('')+'</dl><div class="e-actions"><button type="button" data-act="edit" data-id="'+esc(t.id)+'">Edit</button><button type="button" data-act="copy" data-id="'+esc(t.id)+'">Log another like this</button><button type="button" class="danger" data-act="del" data-id="'+esc(t.id)+'">Delete</button></div></div>';
+}
+function renderTrips(){
+  var el=$('#entries'),list=sorted();
+  $('#tr-sub').textContent=list.length?plural(list.length,'trip')+' on this phone':'';
+  if(!list.length){el.innerHTML='<p class="empty" style="padding-top:14px">No trips yet. Tap “Log a trip” when you\'re off the water. A day with no fish counts too.</p>';$('#moreBtn').hidden=true;return}
+  el.innerHTML=list.slice(0,shown).map(function(t){
+    var cut=cnt(t,'cutthroat'),any=totalCaught(t);
+    var pill=cut>0?'<span class="pill hit">'+cut+' cutthroat</span>':(any>0?'<span class="pill blank">No cutthroat</span>':'<span class="pill blank">No fish</span>');
+    var bits=[riverOf(t.river).short,plural(t.people,'person','people')+' · '+r1(t.hours)+' h'];
+    if(any>cut)bits.push((any-cut)+' other fish');
+    if(t.run)bits.push(t.run);
+    return '<details class="entry" data-id="'+esc(t.id)+'"'+(openIds[t.id]?' open':'')+'><summary><div class="e-main"><div class="e-date">'+esc(fmtDate(t.date,true))+'</div><div class="e-sub">'+esc(bits.join(' · '))+'</div></div><div>'+pill+'</div></summary>'+detail(t)+'</details>';
+  }).join('');
+  $('#moreBtn').hidden=list.length<=shown;
+}
+function reportYears(){
+  var set={};set[licenceStart(todayStr())]=1;
+  all().forEach(function(t){set[licenceStart(t.date)]=1});
+  return Object.keys(set).map(Number).sort(function(a,b){return b-a});
+}
+function reportTrips(){
+  var a=lyear+'-04-01',b=(lyear+1)+'-03-31';
+  return all().filter(function(t){return t.date>=a&&t.date<=b}).sort(function(x,y){return x.date<y.date?-1:x.date>y.date?1:x.createdAt-y.createdAt});
+}
+function renderReport(){
+  var years=reportYears();
+  if(lyear===null||years.indexOf(lyear)<0)lyear=years[0];
+  var s=$('#lyear');
+  if(s.getAttribute('data-built')!==years.join(',')){
+    s.innerHTML=years.map(function(y){return '<option value="'+y+'">'+lyLabel(y)+' licence year</option>'}).join('');
+    s.setAttribute('data-built',years.join(','));
+  }
+  s.value=String(lyear);
+  var el=$('#report'),list=reportTrips();
+  $('#exportBC').disabled=!list.length;$('#exportAll').disabled=!all().length;
+  if(!list.length){el.innerHTML='<p class="empty">No trips in the '+lyLabel(lyear)+' licence year (April 1 '+lyear+' to March 31 '+(lyear+1)+').</p>';return}
+  var days={},people=0,hrs=0,caught={},kept={},byR={};
+  list.forEach(function(t){
+    days[t.date]=1;people+=t.people;hrs+=ah(t);
+    var r=byR[t.river]||(byR[t.river]={n:0,ah:0,cut:0,all:0});r.n++;r.ah+=ah(t);r.cut+=cnt(t,'cutthroat');r.all+=totalCaught(t);
+    SP_IDS.forEach(function(id){if(t.c[id])caught[id]=(caught[id]||0)+t.c[id];if(t.k[id])kept[id]=(kept[id]||0)+t.k[id]});
+  });
+  var sp=SPECIES.filter(function(x){return caught[x.id]}).map(function(x){var kp=kept[x.id]||0;return '<tr><td>'+esc(x.name)+'</td><td>'+(caught[x.id]-kp)+'</td><td>'+kp+'</td><td class="rate">'+(caught[x.id]/hrs).toFixed(2)+'</td></tr>'}).join('');
+  var rv=RIVERS.filter(function(r){return byR[r.id]}).map(function(r){var x=byR[r.id];return '<tr><td>'+esc(r.short)+'</td><td>'+x.n+'</td><td>'+r1(x.ah)+'</td><td>'+x.cut+'</td><td class="rate">'+(x.ah?(x.cut/x.ah).toFixed(2):'–')+'</td></tr>'}).join('');
+  el.innerHTML='<ul class="facts"><li><b>'+Object.keys(days).length+'</b> guided '+(Object.keys(days).length===1?'day':'days')+' · <b>'+list.length+'</b> '+(list.length===1?'group':'groups')+' · <b>'+people+'</b> anglers · <b>'+r1(hrs)+'</b> angler-hours</li></ul>'+
+    (sp?'<div class="tablewrap"><table class="dt"><thead><tr><th>Species</th><th>Released</th><th>Kept</th><th>Per hr</th></tr></thead><tbody>'+sp+'</tbody></table></div>':'<p class="empty" style="margin-top:12px">No fish logged this licence year.</p>')+
+    '<h3 class="subh">Cutthroat by river</h3><div class="tablewrap"><table class="dt"><thead><tr><th>River</th><th>Trips</th><th>Ang-hrs</th><th>Cutt</th><th>Per hr</th></tr></thead><tbody>'+rv+'</tbody></table></div>';
+}
+function renderSettings(){
+  if(document.activeElement!==$('#s-guide'))$('#s-guide').value=settings.guide||'';
+  if(document.activeElement!==$('#s-licence'))$('#s-licence').value=settings.licence||'';
+  $$('#s-gps .chip').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-v')===settings.gps))});
+  var lb=settings.lastBackup?'Last backup saved '+new Date(settings.lastBackup).toLocaleDateString('en-CA',{day:'numeric',month:'short',year:'numeric'})+'.':'No backup saved yet.';
+  $('#bk-status').textContent=lb;
+  $('#bk-sub').textContent=settings.guide||'';
+  var standalone=(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;
+  var ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  $('#installHint').textContent=standalone?'Installed. Open it from your home screen, even with no signal.':
+    (ios?'In Safari, tap the Share button, then “Add to Home Screen”. Open it from there and it works with no signal.':'Add this app to your home screen so it opens with no signal. In Chrome, use the menu, then “Add to Home screen” or “Install app”.');
+  $('#installBtn').hidden=!deferredInstall||standalone;
+  $('#version').textContent='Version '+APP_VERSION+' · trips are stored only on this device.';
+}
+
+/* ---------- toast ---------- */
+function toast(msg){var el=$('#toast');el.textContent=msg;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(function(){el.hidden=true},3600)}
+
+/* ---------- form ---------- */
+function stepperHtml(id,val,cls,min,max,label){
+  return '<div class="stepper '+(cls||'')+'" data-min="'+min+'" data-max="'+max+'"><button type="button" data-step="-1" aria-label="One fewer '+esc(label)+'">−</button><input type="number" id="'+id+'" inputmode="numeric" min="'+min+'" max="'+max+'" step="1" value="'+val+'" aria-label="'+esc(label)+'"><button type="button" data-step="1" aria-label="One more '+esc(label)+'">+</button></div>';
+}
+function buildForm(){
+  $('#f-rivers').innerHTML=RIVERS.map(function(r){return '<label><input type="radio" name="river" value="'+r.id+'"><span>'+esc(r.name)+'</span></label>'}).join('');
+  $('#res-rows').innerHTML=RES.map(function(x){return '<div class="row"><span>'+esc(x.name)+'</span>'+stepperHtml('r-'+x.id,0,'sm',0,60,x.name)+'</div>'}).join('');
+  $('#sp-grid').innerHTML=SPECIES.map(function(x,i){
+    return '<div class="row'+(i===0?' primary-sp':'')+'"><span>'+esc(x.name)+'</span>'+stepperHtml('c-'+x.id,0,'sm',0,500,x.name+' caught')+
+      '<div class="kept"><span>of which kept</span>'+stepperHtml('k-'+x.id,0,'sm',0,500,x.name+' kept')+'</div></div>';
+  }).join('');
+  $$('.chips[data-key]').forEach(function(box){
+    var key=box.getAttribute('data-key');
+    box.innerHTML=OPTS[key].map(function(o){return '<button type="button" class="chip" data-v="'+esc(o[0])+'" aria-pressed="false">'+esc(o[1])+'</button>'}).join('');
+  });
+}
+function setChips(key,val){
+  sel[key]=val?[val]:[];
+  var box=$('.chips[data-key="'+key+'"]');
+  $$('.chip',box).forEach(function(b){b.setAttribute('aria-pressed',String(sel[key].indexOf(b.getAttribute('data-v'))>-1))});
+  if(key==='park')$('#park-fields').hidden=sel.park[0]!=='yes';
+}
+function setKeptMode(on){keptMode=on;$('#sp-grid').classList.toggle('keptmode',on);$('#keptToggle').setAttribute('aria-pressed',String(on))}
+function find(id){return all().filter(function(x){return x.id===id})[0]||null}
+function openSheet(id,copyFrom){
+  var t=id?find(id):null,src=t||(copyFrom?find(copyFrom):null);
+  editingId=t?t.id:null;
+  $('#sheet-title').textContent=t?'Edit trip':'Log a trip';
+  $('#saveBtn').textContent=t?'Save changes':'Save trip';
+  $('#formMsg').textContent='';
+  $('#f-date').max=todayStr();
+  $('#f-date').value=t?t.date:todayStr();
+  dateTouched=false;currentDay=todayStr();
+  $$('input[name=river]').forEach(function(r){r.checked=!!src&&r.value===src.river});
+  RES_IDS.forEach(function(k){$('#r-'+k).value=src?(src.res[k]||0):(k==='bc'?(settings.lastBc>0?settings.lastBc:2):0)});
+  $('#f-hours').value=t?t.hours:'';
+  SP_IDS.forEach(function(k){$('#c-'+k).value=t?(t.c[k]||0):0;$('#k-'+k).value=t?(t.k[k]||0):0});
+  setKeptMode(!!t&&sum(t.k)>0);
+  $('#f-rods').value=t&&t.rodsGiven?t.rods:'';
+  $('#f-temp').value=t&&t.tempC!==null?t.tempC:'';
+  $('#f-run').value=src?src.run:'';
+  $('#f-notes').value=t?t.notes:'';
+  $('#f-parkname').value=src?src.parkName:'';
+  $('#f-parkpermit').value=src?src.parkPermit:'';
+  ['idConf','form'].forEach(function(k){setChips(k,t?t[k]:'')});
+  ['level','clarity','park'].forEach(function(k){setChips(k,src?src[k]:'')});
+  $('#more').open=!!src&&!!(src.rodsGiven||src.idConf||src.form||src.level||src.clarity||src.tempC!==null||src.park||src.run||src.notes);
+  formGps=t?t.gps:null;stopGps();renderGps();
+  updateReadout();
+  opener=document.activeElement;
+  $('#sheet').hidden=false;document.body.style.overflow='hidden';
+  $('#sheet-title').focus();
+  if(!t&&settings.gps==='auto')getGps(true);
+}
+function closeSheet(){
+  stopGps();
+  $('#sheet').hidden=true;document.body.style.overflow='';editingId=null;
+  if(opener&&opener.focus&&document.contains(opener)){try{opener.focus()}catch(e){}}
+}
+function newId(){
+  try{if(window.crypto&&crypto.randomUUID)return 't'+crypto.randomUUID().replace(/-/g,'').slice(0,20)}catch(e){}
+  return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+}
+function val(id){return parseInt($('#'+id).value,10)||0}
+function updateReadout(){
+  var el=$('#readout');
+  var h=parseFloat($('#f-hours').value),people=val('r-bc')+val('r-nr')+val('r-nra'),cut=val('c-cutthroat'),tot=0;
+  SP_IDS.forEach(function(k){var n=val('c-'+k);tot+=n;var row=$('#c-'+k).closest('.row');row.classList.toggle('has',n>0)});
+  if(!(h>0)||!(people>0)){el.textContent=people>0?'Enter hours fished to see catch per angler-hour.':'Add the people fishing to see catch per angler-hour.';return}
+  var a=h*people;
+  el.innerHTML=plural(people,'person','people')+' · <b>'+r1(a)+'</b> angler-hours<br>Cutthroat <b>'+(cut/a).toFixed(2)+'</b> per angler-hour'+(tot>cut?' · all species <b>'+(tot/a).toFixed(2)+'</b>':'');
+}
+
+/* ---------- GPS ---------- */
+function renderGps(msg){
+  var v=$('#gpsVal');
+  if(gpsBusy){v.textContent=msg||'Finding your location…';v.className='gps-val';$('#gpsBtn').textContent='Stop';$('#gpsClear').hidden=true;return}
+  if(formGps){v.textContent=gpsText(formGps);v.className='gps-val ok';$('#gpsBtn').textContent='Update location';$('#gpsClear').hidden=false}
+  else{v.textContent=msg||'No location yet';v.className='gps-val';$('#gpsBtn').textContent='Use my location';$('#gpsClear').hidden=true}
+}
+function stopGps(){
+  if(gpsWatch!==null){try{navigator.geolocation.clearWatch(gpsWatch)}catch(e){}gpsWatch=null}
+  clearTimeout(stopGps.t);gpsBusy=false;
+}
+function getGps(auto){
+  if(!('geolocation' in navigator)){renderGps('This phone or browser does not offer location.');return}
+  stopGps();gpsBusy=true;renderGps();
+  var best=null,started=Date.now();
+  function finish(msg){stopGps();if(best){formGps=best}renderGps(best?null:msg)}
+  try{
+    gpsWatch=navigator.geolocation.watchPosition(function(p){
+      var g={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy||0,at:p.timestamp||Date.now()};
+      if(!best||g.acc<best.acc){best=g;formGps=g}
+      renderGps('Got ±'+Math.round(best.acc)+' m, refining…');
+      if(best.acc<=25)finish();
+    },function(err){
+      if(err.code===1){settings.gps='ask';saveSettings();renderSettings();finish('Location is turned off for this app. Allow it in your phone\'s settings to use GPS.')}
+      else if(!best&&Date.now()-started>55000)finish('Could not get a GPS fix. Try again in a more open spot.');
+    },{enableHighAccuracy:true,maximumAge:0,timeout:60000});
+    stopGps.t=setTimeout(function(){finish(best?null:'Could not get a GPS fix. Try again in a more open spot.')},60000);
+  }catch(e){finish('Location is not available here.')}
+}
+
+/* ---------- save ---------- */
+function fail(msg,selector){$('#formMsg').textContent=msg;var el=selector&&$(selector);if(el&&el.focus)el.focus();return null}
+function readForm(){
+  var date=$('#f-date').value,rv=$('input[name=river]:checked'),hours=parseFloat($('#f-hours').value);
+  var res={};RES_IDS.forEach(function(k){var n=val('r-'+k);if(n>0)res[k]=n});
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return fail('Pick the date of the trip.','#f-date');
+  if(date>todayStr())return fail('That date is in the future.','#f-date');
+  if(!rv)return fail('Pick the waterbody.','#f-rivers input');
+  if(!(sum(res)>=1))return fail('Add at least one person fishing.','#r-bc');
+  if(!(hours>0&&hours<=24))return fail('Enter the hours fished, up to 24.','#f-hours');
+  var c={},k={};
+  for(var i=0;i<SP_IDS.length;i++){
+    var id=SP_IDS[i],n=val('c-'+id),kp=keptMode?val('k-'+id):0;
+    if(kp>n)return fail('Kept cannot be more than caught for '+spName(id).toLowerCase()+'.','#k-'+id);
+    if(n>0)c[id]=n;if(kp>0)k[id]=kp;
+  }
+  var t={id:editingId||newId(),date:date,river:rv.value,hours:hours,res:res,c:c,v:1};
+  if(Object.keys(k).length)t.k=k;
+  if(formGps)t.gps=formGps;
+  var rods=parseInt($('#f-rods').value,10);if(rods>0)t.rods=Math.min(rods,60);
+  var tp=parseFloat($('#f-temp').value);if(!isNaN(tp))t.tempC=tp;
+  ['idConf','form','level','clarity','park'].forEach(function(key){if(sel[key]&&sel[key][0])t[key]=sel[key][0]});
+  function opt(key,v){if(v)t[key]=v}
+  if(t.park==='yes'){opt('parkName',$('#f-parkname').value.trim());opt('parkPermit',$('#f-parkpermit').value.trim())}
+  opt('run',$('#f-run').value.trim());opt('notes',$('#f-notes').value.trim());
+  return t;
+}
+function onSubmit(e){
+  e.preventDefault();
+  if(gpsBusy)stopGps();
+  var t=readForm();if(!t)return;
+  var old=editingId?trips.filter(function(x){return x.id===editingId})[0]:null;
+  t.createdAt=old&&old.createdAt?old.createdAt:Date.now();
+  t.updatedAt=Date.now();
+  trips=trips.filter(function(x){return x.id!==t.id});trips.push(t);
+  if(!saveTrips())return;
+  settings.lastBc=t.res.bc||0;saveSettings();askPersist();
+  lyear=licenceStart(t.date);
+  closeSheet();render();
+  toast(old?'Changes saved.':'Trip saved on this phone.');
+}
+function removeTrip(id){trips=trips.filter(function(x){return x.id!==id});saveTrips();delete openIds[id];render();toast('Trip deleted.')}
+
+/* ---------- files ---------- */
+function csvCell(v){var s=String(v==null?'':v);return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
+function toCsv(rows){return '﻿'+rows.map(function(r){return r.map(csvCell).join(',')}).join('\r\n')}
+function slug(s){return (s||'guide').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'guide'}
+async function deliver(filename,text,mime){
+  var blob=new Blob([text],{type:mime});
+  var touch=window.matchMedia&&matchMedia('(pointer:coarse)').matches;
+  if(touch&&navigator.canShare&&typeof File==='function'){
+    try{
+      var file=new File([blob],filename,{type:mime});
+      if(navigator.canShare({files:[file]})){await navigator.share({files:[file],title:filename});return true}
+    }catch(e){if(e&&e.name==='AbortError')return false}
+  }
+  var url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=filename;a.rel='noopener';document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);a.remove()},4000);
+  return true;
+}
+function bcRows(list){
+  var head=['Date (yyyy-mm-dd)','Waterbody','B.C. residents','Non-residents','Non-resident aliens','In provincial park','Park name','Park permit number'];
+  SPECIES.forEach(function(x){head.push(x.name+' released');head.push(x.name+' kept')});
+  head.push('Comments');
+  var rows=[head];
+  list.forEach(function(t){
+    var r=[t.date,riverOf(t.river).name,t.res.bc||0,t.res.nr||0,t.res.nra||0,t.park==='yes'?'Yes':'No',t.parkName,t.parkPermit];
+    SPECIES.forEach(function(x){var c=t.c[x.id]||0,k=t.k[x.id]||0;r.push(c-k);r.push(k)});
+    r.push(t.notes);rows.push(r);
+  });
+  return rows;
+}
+function exportBC(){
+  var list=reportTrips();if(!list.length)return;
+  deliver('bc-guide-report-'+slug(settings.guide)+'-'+lyear+'-'+String(lyear+1).slice(2)+'.csv',toCsv(bcRows(list)),'text/csv');
+}
+function allRows(list){
+  var head=['date','river','run_or_pool','latitude','longitude','gps_accuracy_m','hours_fished','people_fishing','bc_residents','non_residents','non_resident_aliens','angler_hours','rods'];
+  SPECIES.forEach(function(x){head.push(x.id+'_caught');head.push(x.id+'_kept')});
+  head=head.concat(['cutthroat_per_angler_hour','all_species_per_angler_hour','cutthroat_id_check','cutthroat_form','water_level','clarity','water_temp_c','in_provincial_park','park_name','park_permit','comments','guide','guide_licence']);
+  var rows=[head];
+  function q(n,d){return d>0?Math.round(1000*n/d)/1000:''}
+  list.forEach(function(t){
+    var g=t.gps;
+    var r=[t.date,riverOf(t.river).name,t.run,g?g.lat.toFixed(6):'',g?g.lon.toFixed(6):'',g&&g.acc?Math.round(g.acc):'',t.hours,t.people,t.res.bc||0,t.res.nr||0,t.res.nra||0,Math.round(ah(t)*100)/100,t.rodsGiven?t.rods:''];
+    SPECIES.forEach(function(x){r.push(t.c[x.id]||0);r.push(t.k[x.id]||0)});
+    r=r.concat([q(cnt(t,'cutthroat'),ah(t)),q(totalCaught(t),ah(t)),lab('idConf',t.idConf),lab('form',t.form),lab('level',t.level),lab('clarity',t.clarity),t.tempC===null?'':t.tempC,t.park==='yes'?'Yes':'No',t.parkName,t.parkPermit,t.notes,settings.guide,settings.licence]);
+    rows.push(r);
+  });
+  return rows;
+}
+function exportAll(){
+  var list=all().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:a.createdAt-b.createdAt});if(!list.length)return;
+  deliver('guide-log-all-trips-'+slug(settings.guide)+'-'+todayStr()+'.csv',toCsv(allRows(list)),'text/csv');
+}
+async function backup(){
+  var data={app:'squamish-guide-log',format:1,exportedAt:new Date().toISOString(),settings:{guide:settings.guide,licence:settings.licence},trips:trips};
+  var ok=await deliver('guide-log-backup-'+slug(settings.guide)+'-'+todayStr()+'.json',JSON.stringify(data,null,1),'application/json');
+  if(ok){settings.lastBackup=Date.now();saveSettings();render();toast('Backup file made. Keep it somewhere safe.')}
+}
+function mergeBackup(data){
+  if(!data||data.app!=='squamish-guide-log'||!Array.isArray(data.trips))throw new Error('not ours');
+  var byId={},added=0,updated=0;
+  trips.forEach(function(t){byId[t.id]=t});
+  data.trips.forEach(function(t){
+    if(!t||!t.id||!valid(norm(t)))return;
+    var cur=byId[t.id];
+    if(!cur){byId[t.id]=t;added++}
+    else if(num(t.updatedAt)>num(cur.updatedAt)){byId[t.id]=t;updated++}
+  });
+  trips=Object.keys(byId).map(function(k){return byId[k]});
+  if(data.settings){if(!settings.guide&&data.settings.guide)settings.guide=data.settings.guide;if(!settings.licence&&data.settings.licence)settings.licence=data.settings.licence}
+  return {added:added,updated:updated};
+}
+function restoreFile(file){
+  var r=new FileReader();
+  r.onload=function(){
+    try{
+      var res=mergeBackup(JSON.parse(r.result));
+      saveTrips();saveSettings();render();
+      toast(res.added||res.updated?'Restored: '+plural(res.added,'new trip')+(res.updated?', '+res.updated+' updated':'')+'.':'Nothing new in that backup. Your trips are unchanged.');
+    }catch(e){toast('That file is not a Guide Log backup.')}
+  };
+  r.onerror=function(){toast('Could not read that file.')};
+  r.readAsText(file);
+}
+
+/* ---------- clock ---------- */
+function updateToday(){$('#today').textContent=new Date().toLocaleDateString('en-CA',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}
+function tick(){
+  var t=todayStr();
+  if(t!==currentDay){
+    currentDay=t;$('#f-date').max=t;
+    if(!$('#sheet').hidden&&!editingId&&!dateTouched){$('#f-date').value=t;toast('Date moved on to today.')}
+    render();
+  }
+  updateToday();
+}
+
+/* ---------- events ---------- */
+function bind(){
+  $('#openLog').addEventListener('click',function(){openSheet(null)});
+  $('#closeSheet').addEventListener('click',closeSheet);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('#sheet').hidden)closeSheet()});
+  $('#tripForm').addEventListener('submit',onSubmit);
+  $('#moreBtn').addEventListener('click',function(){shown+=20;renderTrips()});
+  $('#lyear').addEventListener('change',function(e){lyear=parseInt(e.target.value,10);renderReport()});
+  $('#exportBC').addEventListener('click',exportBC);
+  $('#exportAll').addEventListener('click',exportAll);
+  $('#backupBtn').addEventListener('click',backup);
+  $('#restoreBtn').addEventListener('click',function(){$('#restoreFile').click()});
+  $('#restoreFile').addEventListener('change',function(e){var f=e.target.files&&e.target.files[0];if(f)restoreFile(f);e.target.value=''});
+  $('#s-guide').addEventListener('input',function(e){settings.guide=e.target.value.trim();saveSettings();$('#bk-sub').textContent=settings.guide});
+  $('#s-licence').addEventListener('input',function(e){settings.licence=e.target.value.trim();saveSettings()});
+  $('#s-gps').addEventListener('click',function(e){var b=e.target.closest('.chip');if(!b)return;settings.gps=b.getAttribute('data-v');saveSettings();renderSettings()});
+  $('#installBtn').addEventListener('click',async function(){if(!deferredInstall)return;deferredInstall.prompt();try{await deferredInstall.userChoice}catch(e){}deferredInstall=null;renderSettings()});
+  $('#notice').addEventListener('click',function(e){
+    var b=e.target.closest('button[data-act]');if(!b)return;
+    if(b.getAttribute('data-act')==='backup')backup();
+    if(b.getAttribute('data-act')==='update'&&swWaiting)swWaiting.postMessage('skipWaiting');
+  });
+  $('#gpsBtn').addEventListener('click',function(){if(gpsBusy){stopGps();renderGps()}else getGps(false)});
+  $('#gpsClear').addEventListener('click',function(){formGps=null;renderGps()});
+  $('#f-date').addEventListener('input',function(){dateTouched=true});
+  $('#f-date').addEventListener('change',function(){dateTouched=true});
+  $('#tripForm').addEventListener('input',updateReadout);
+  $('#keptToggle').addEventListener('click',function(){setKeptMode(!keptMode)});
+  $('#tripForm').addEventListener('click',function(e){
+    var st=e.target.closest('.stepper button');
+    if(st){
+      var box=st.closest('.stepper'),inp=$('input',box),min=+box.getAttribute('data-min'),max=+box.getAttribute('data-max');
+      var v=parseInt(inp.value,10);if(isNaN(v))v=min-(+st.getAttribute('data-step')>0?1:0);
+      inp.value=Math.min(max,Math.max(min,v+parseInt(st.getAttribute('data-step'),10)));updateReadout();return;
+    }
+    var ch=e.target.closest('.chips[data-key] .chip');
+    if(ch){var key=ch.closest('.chips').getAttribute('data-key'),v2=ch.getAttribute('data-v');setChips(key,(sel[key]||[])[0]===v2?'':v2)}
+  });
+  $('#entries').addEventListener('toggle',function(e){var d=e.target;if(d.classList&&d.classList.contains('entry')){var id=d.getAttribute('data-id');if(d.open)openIds[id]=1;else delete openIds[id]}},true);
+  $('#entries').addEventListener('click',function(e){
+    var b=e.target.closest('button[data-act]');if(!b)return;
+    var id=b.getAttribute('data-id'),act=b.getAttribute('data-act');
+    if(act==='edit'){openSheet(id);return}
+    if(act==='copy'){openSheet(null,id);return}
+    if(act==='del'){
+      if(b.classList.contains('sure')){removeTrip(id);return}
+      b.classList.add('sure');b.textContent='Yes, delete this trip';
+      setTimeout(function(){if(document.contains(b)){b.classList.remove('sure');b.textContent='Delete'}},5000);
+    }
+  });
+  window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferredInstall=e;renderSettings()});
+  window.addEventListener('storage',function(e){if(e.key===K_TRIPS||e.key===K_SET){trips=loadJSON(K_TRIPS,[]);settings=Object.assign(settings,loadJSON(K_SET,{}));render()}});
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')tick()});
+  setInterval(tick,20000);
+}
+
+/* ---------- service worker ---------- */
+function registerSW(){
+  if(!('serviceWorker' in navigator))return;
+  var reloading=false,hadController=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange',function(){if(reloading||!hadController)return;reloading=true;location.reload()});
+  navigator.serviceWorker.register('sw.js').then(function(reg){
+    function watch(w){w.addEventListener('statechange',function(){if(w.state==='installed'&&navigator.serviceWorker.controller){swWaiting=w;renderNotice()}})}
+    if(reg.waiting&&navigator.serviceWorker.controller){swWaiting=reg.waiting;renderNotice()}
+    if(reg.installing)watch(reg.installing);
+    reg.addEventListener('updatefound',function(){if(reg.installing)watch(reg.installing)});
+  }).catch(function(){});
+}
+
+/* ---------- start ---------- */
+buildForm();bind();updateToday();render();registerSW();
+window.__sgl={mergeBackup:mergeBackup,bcRows:bcRows,allRows:allRows,all:all,licenceStart:licenceStart};
+})();

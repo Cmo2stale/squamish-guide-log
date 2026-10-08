@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Squamish Guide Log</title>
+<meta name="description" content="Offline trip logbook for fishing guides in the Squamish River watershed.">
+<meta name="theme-color" content="#eef1ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e191b" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Guide Log">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <div class="tag"><span id="today"></span> · Guide logbook</div>
+    <h1>Squamish Guide Log</h1>
+    <p class="lede">Your field book for the Squamish, Ashlu, Mamquam, Cheakamus and Elaho. Trips are saved on this phone and work with no signal.</p>
+    <span class="slash" aria-hidden="true"></span>
+  </header>
+
+  <div id="notice" class="notice" hidden></div>
+
+  <section aria-labelledby="tr-h">
+    <div class="sec-head">
+      <h2 id="tr-h">Trips</h2>
+      <span class="sec-sub" id="tr-sub"></span>
+    </div>
+    <div class="entries" id="entries"></div>
+    <button type="button" class="ghost more-btn" id="moreBtn" hidden>Show more</button>
+  </section>
+
+  <section aria-labelledby="rp-h">
+    <div class="sec-head">
+      <h2 id="rp-h">Season</h2>
+      <div class="report-ctl"><select id="lyear" aria-label="Licence year"></select></div>
+    </div>
+    <div id="report"></div>
+    <div class="btnrow">
+      <button type="button" class="primary" id="exportBC">Export for the BC report</button>
+      <button type="button" class="ghost" id="exportAll">Full trip spreadsheet</button>
+    </div>
+    <p class="legend">The BC Freshwater Angling Guide Report is a web form you fill in with your Basic BCeID. The export has one row per group, in the same order as the form, so you can copy it across. Reports are due March 31, or April 30 if you guided in March. <a href="https://www2.gov.bc.ca/gov/content/environment/plants-animals-ecosystems/fish/fish-and-fish-habitat-data-information/fish-data-submission/submit-angling-guide-data" target="_blank" rel="noopener">BC submission page</a></p>
+  </section>
+
+  <details class="panel" id="settings">
+    <summary><h2>Settings and backup</h2><span class="sec-sub" id="bk-sub"></span></summary>
+    <div class="panel-in">
+      <div class="field">
+        <label for="s-guide">Your name</label>
+        <input type="text" id="s-guide" maxlength="60" autocomplete="name" placeholder="Shown on your exports">
+      </div>
+      <div class="field">
+        <label for="s-licence">Angling guide licence number (optional)</label>
+        <input type="text" id="s-licence" maxlength="40" autocomplete="off">
+      </div>
+      <div class="field">
+        <span class="lab">GPS on new trips</span>
+        <div class="chips" id="s-gps">
+          <button type="button" class="chip" data-v="auto" aria-pressed="false">Grab it automatically</button>
+          <button type="button" class="chip" data-v="ask" aria-pressed="false">Only when I tap</button>
+        </div>
+        <p class="hint">GPS works without cell service. It may take up to a minute to find you in a deep canyon or under heavy tree cover.</p>
+      </div>
+      <div class="field">
+        <span class="lab">Backup</span>
+        <p class="hint" id="bk-status"></p>
+        <div class="btnrow" style="margin-top:4px">
+          <button type="button" class="ghost" id="backupBtn">Save a backup file</button>
+          <button type="button" class="ghost" id="restoreBtn">Restore from a backup</button>
+          <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+        </div>
+        <p class="hint">Your trips live only on this phone. Save a backup now and then, and email it to yourself or keep it in Files or Drive. Restoring merges trips; it never deletes any.</p>
+      </div>
+      <div class="field">
+        <span class="lab">Install</span>
+        <p class="hint" id="installHint"></p>
+        <div class="btnrow" style="margin-top:4px"><button type="button" class="ghost" id="installBtn" hidden>Install on this phone</button></div>
+      </div>
+      <p class="hint" id="version"></p>
+    </div>
+  </details>
+</div>
+
+<div class="dock" id="dock"><div class="dock-in"><button type="button" class="primary" id="openLog">Log a trip</button></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+  <form id="tripForm" novalidate>
+    <div class="sheet-head">
+      <h2 id="sheet-title" tabindex="-1">Log a trip</h2>
+      <button type="button" class="ghost" id="closeSheet">Close</button>
+    </div>
+    <div class="sheet-scroll">
+      <div class="sheet-body">
+        <div class="field">
+          <label for="f-date">Date</label>
+          <input type="date" id="f-date" required>
+        </div>
+        <fieldset class="field">
+          <legend>Waterbody</legend>
+          <div class="rivers" id="f-rivers"></div>
+        </fieldset>
+        <div class="field">
+          <span class="lab">Location</span>
+          <div class="gps">
+            <div class="gps-top">
+              <span class="gps-val" id="gpsVal">No location yet</span>
+              <button type="button" class="ghost" id="gpsBtn">Use my location</button>
+            </div>
+            <button type="button" class="ghost" id="gpsClear" hidden>Remove location</button>
+          </div>
+          <p class="hint">Kept on this phone with the trip. It isn't sent to the province.</p>
+        </div>
+        <fieldset class="field">
+          <legend>People fishing</legend>
+          <div class="rows" id="res-rows"></div>
+          <details class="idhelp">
+            <summary>Which group is which?</summary>
+            <ul>
+              <li>B.C. resident: lives in B.C. and meets the province's residency conditions.</li>
+              <li>Non-resident: not a B.C. resident, but a Canadian citizen or permanent resident, or has lived in Canada for 12 months or more.</li>
+              <li>Non-resident alien: everyone else.</li>
+            </ul>
+          </details>
+        </fieldset>
+        <div class="field">
+          <label for="f-hours">Hours fished</label>
+          <input type="number" id="f-hours" inputmode="decimal" step="0.25" min="0.25" max="24" placeholder="e.g. 5">
+          <p class="hint">Time lines were in the water, for the group.</p>
+        </div>
+        <fieldset class="field">
+          <legend>Fish caught</legend>
+          <div class="rows" id="sp-grid"></div>
+          <div class="chips"><button type="button" class="chip" id="keptToggle" aria-pressed="false">Some fish were kept</button></div>
+          <p class="hint">Count every fish landed. Anything not marked as kept is reported as released.</p>
+        </fieldset>
+        <p class="readout" id="readout" aria-live="polite"></p>
+
+        <details class="more" id="more">
+          <summary>More detail (optional)</summary>
+          <div class="more-in">
+            <div class="field">
+              <label for="f-rods">Rods in the water</label>
+              <div class="stepper" data-min="1" data-max="60">
+                <button type="button" data-step="-1" aria-label="One fewer rod">−</button>
+                <input type="number" id="f-rods" inputmode="numeric" min="1" max="60" step="1" placeholder="Same as people">
+                <button type="button" data-step="1" aria-label="One more rod">+</button>
+              </div>
+            </div>
+            <details class="idhelp">
+              <summary>Cutthroat or rainbow?</summary>
+              <ul>
+                <li>Upper jaw bone reaches to or past the back of the eye.</li>
+                <li>Orange-red slash under the lower jaw. It starts showing at roughly 8 to 13 cm.</li>
+                <li>Small teeth behind the tongue (basibranchial). Rainbows lack them.</li>
+                <li>Cutthroat and rainbow or steelhead hybridise. If a fish is doubtful, say so below.</li>
+              </ul>
+            </details>
+            <div class="field"><span class="lab">Cutthroat ID check</span><div class="chips" data-key="idConf"></div></div>
+            <div class="field"><span class="lab">Cutthroat form</span><div class="chips" data-key="form"></div></div>
+            <div class="field"><span class="lab">Water level</span><div class="chips" data-key="level"></div></div>
+            <div class="field"><span class="lab">Water clarity</span><div class="chips" data-key="clarity"></div></div>
+            <div class="field"><label for="f-temp">Water temperature (°C)</label><input type="number" id="f-temp" inputmode="decimal" min="0" max="25" step="0.5"></div>
+            <div class="field">
+              <span class="lab">In a provincial park?</span>
+              <div class="chips" data-key="park"></div>
+              <div class="sub-fields" id="park-fields" hidden>
+                <input type="text" id="f-parkname" maxlength="80" placeholder="Park name" aria-label="Park name">
+                <input type="text" id="f-parkpermit" maxlength="40" placeholder="Angling Guides Park Permit number" aria-label="Park permit number">
+              </div>
+            </div>
+            <div class="field"><label for="f-run">Run or pool</label><input type="text" id="f-run" maxlength="60"></div>
+            <div class="field"><label for="f-notes">Comments</label><textarea id="f-notes" maxlength="600"></textarea><p class="hint">Goes into the BC report as your comments.</p></div>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <div class="sheet-foot-in">
+        <p class="msg" id="formMsg" role="alert"></p>
+        <button type="submit" class="primary" id="saveBtn">Save trip</button>
+      </div>
+    </div>
+  </form>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
