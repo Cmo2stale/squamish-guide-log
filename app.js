@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.0.1';
+var APP_VERSION='1.0.2';
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -252,21 +252,28 @@ function updateReadout(){
 }
 
 /* ---------- GPS ---------- */
-function renderGps(msg){
-  var v=$('#gpsVal');
+function renderGps(msg,isErr){
+  var v=$('#gpsVal'),help=$('#gpsHelp');
+  help.hidden=true;
   if(gpsBusy){v.textContent=msg||'Finding your location…';v.className='gps-val';$('#gpsBtn').textContent='Stop';$('#gpsClear').hidden=true;return}
-  if(formGps){v.textContent=gpsText(formGps);v.className='gps-val ok';$('#gpsBtn').textContent='Update location';$('#gpsClear').hidden=false}
-  else{v.textContent=msg||'No location yet';v.className='gps-val';$('#gpsBtn').textContent='Use my location';$('#gpsClear').hidden=true}
+  if(formGps){v.textContent=gpsText(formGps);v.className='gps-val ok';$('#gpsBtn').textContent='Update location';$('#gpsClear').hidden=false;return}
+  v.textContent=msg||'No location yet';v.className='gps-val'+(isErr?' err':'');$('#gpsBtn').textContent=isErr?'Try again':'Use my location';$('#gpsClear').hidden=true;
+  if(isErr==='denied'){help.innerHTML=gpsHelpHtml();help.hidden=false}
+}
+function gpsHelpHtml(){
+  var ios=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  if(ios)return '<b>To allow location on iPhone:</b><ol><li>Open the <b>Settings</b> app, then <b>Privacy &amp; Security → Location Services</b>. Turn it on at the top.</li><li>On the same screen, scroll down to <b>Safari Websites</b> and choose <b>While Using the App</b> (or <b>Ask Next Time</b>).</li><li>Swipe this app closed completely, open it again from your home screen, and tap <b>Try again</b>.</li></ol>';
+  return '<b>To allow location on Android:</b><ol><li>Swipe down from the top of the screen and make sure <b>Location</b> is on.</li><li>Open <b>Chrome → ⋮ → Settings → Site settings → Location</b>. If <b>cmo2stale.github.io</b> is under Blocked, tap it and choose <b>Allow</b>.</li><li>Close this app completely, open it again, and tap <b>Try again</b>.</li></ol>';
 }
 function stopGps(){
   if(gpsWatch!==null){try{navigator.geolocation.clearWatch(gpsWatch)}catch(e){}gpsWatch=null}
   clearTimeout(stopGps.t);gpsBusy=false;
 }
 function getGps(auto){
-  if(!('geolocation' in navigator)){renderGps('This phone or browser does not offer location.');return}
+  if(!('geolocation' in navigator)){renderGps('This phone or browser does not offer location.',true);return}
   stopGps();gpsBusy=true;renderGps();
   var best=null,started=Date.now();
-  function finish(msg){stopGps();if(best){formGps=best}renderGps(best?null:msg)}
+  function finish(msg,kind){stopGps();if(best){formGps=best}renderGps(best?null:msg,best?false:(kind||true));if(!best&&!auto&&kind==='denied')toast('Location is blocked on this phone. See the steps under Location.')}
   try{
     gpsWatch=navigator.geolocation.watchPosition(function(p){
       var g={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy||0,at:p.timestamp||Date.now()};
@@ -274,7 +281,7 @@ function getGps(auto){
       renderGps('Got ±'+Math.round(best.acc)+' m, refining…');
       if(best.acc<=25)finish();
     },function(err){
-      if(err.code===1){settings.gps='ask';saveSettings();renderSettings();finish('Location is turned off for this app. Allow it in your phone\'s settings to use GPS.')}
+      if(err.code===1){finish('Location is blocked for this app on your phone.','denied')}
       else if(!best&&Date.now()-started>55000)finish('Could not get a GPS fix. Try again in a more open spot.');
     },{enableHighAccuracy:true,maximumAge:0,timeout:60000});
     stopGps.t=setTimeout(function(){finish(best?null:'Could not get a GPS fix. Try again in a more open spot.')},60000);
