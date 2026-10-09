@@ -1,5 +1,5 @@
 /* Offline cache for Squamish Guide Log. Bump VERSION whenever any app file changes. */
-var VERSION='sgl-v1.8.0';
+var VERSION='sgl-v1.8.1';
 var FONT_CACHE='sgl-fonts';
 var SHELL=['./','index.html','styles.css','app.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','icons/icon-maskable-512.png'];
 

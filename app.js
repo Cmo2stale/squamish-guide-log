@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.8.0';
+var APP_VERSION='1.8.1';
 var GPS_ENABLED=false; /* set to true to bring back GPS location on trips */
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
