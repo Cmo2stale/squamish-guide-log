@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.5.1';
+var APP_VERSION='1.5.2';
 var GPS_ENABLED=false; /* set to true to bring back GPS location on trips */
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
@@ -190,7 +190,7 @@ function openSheet(id,copyFrom){
   $('#f-date').value=t?t.date:todayStr();
   dateTouched=false;currentDay=todayStr();
   $$('input[name=river]').forEach(function(r){r.checked=!!src&&r.value===src.river});
-  RES_IDS.forEach(function(k){$('#r-'+k).value=src?(src.res[k]||0):(k==='bc'?(settings.lastBc>0?settings.lastBc:2):0)});
+  RES_IDS.forEach(function(k){$('#r-'+k).value=src?(src.res[k]||0):0});
   $('#f-hours').value=t?t.hours:'';
   SP_IDS.forEach(function(k){$('#c-'+k).value=t?(t.c[k]||0):0});
   KEEP_IDS.forEach(function(k){$('#k-'+k).value=t?(t.k[k]||0):0});
