@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.9.0';
+var APP_VERSION='2.0.0';
 var GPS_ENABLED=false; /* set to true to bring back GPS location on trips */
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
@@ -37,6 +37,15 @@ var SPECIES=[
   {id:'pink',name:'Pink',g:'salmon',keep:true},{id:'sockeye',name:'Sockeye',g:'salmon'}
 ];
 var GROUPS=[{id:'trout',name:'Trout and char'},{id:'salmon',name:'Salmon'}];
+/* what a trip was fishing for; used for targeted CPUE so bycatch doesn't drag down rarely-targeted species */
+var TARGETS=[
+  {id:'trout',name:'Trout and char',sp:['bull','cutthroat','rainbow']},{id:'steelhead',name:'Steelhead',sp:['steelhead']},
+  {id:'chinook',name:'Chinook',sp:['chinook_h','chinook_w']},{id:'chum',name:'Chum',sp:['chum']},
+  {id:'coho',name:'Coho',sp:['coho_h','coho_w']},{id:'pink',name:'Pink',sp:['pink']},{id:'sockeye',name:'Sockeye',sp:['sockeye']}
+];
+var TARGET_IDS=TARGETS.map(function(x){return x.id});
+function targetOf(spId){for(var i=0;i<TARGETS.length;i++){if(TARGETS[i].sp.indexOf(spId)>-1)return TARGETS[i].id}return null}
+function targetName(id){for(var i=0;i<TARGETS.length;i++){if(TARGETS[i].id===id)return TARGETS[i].name}return id}
 var LEGACY={chinook:'chinook_w',coho:'coho_w'}; /* trips logged before hatchery/wild split */
 var SP_IDS=SPECIES.map(function(x){return x.id});
 var KEEP_IDS=SPECIES.filter(function(x){return x.keep}).map(function(x){return x.id});
@@ -64,7 +73,7 @@ function norm(t){
   Object.keys(k).forEach(function(id){if(k[id]>(c[id]||0)){if(c[id])k[id]=c[id];else delete k[id]}});
   var g=t.gps&&isFinite(t.gps.lat)&&isFinite(t.gps.lon)?{lat:+t.gps.lat,lon:+t.gps.lon,acc:num(t.gps.acc),at:num(t.gps.at)}:null;
   return {id:String(t.id),date:typeof t.date==='string'?t.date:'',river:t.river,hours:num(t.hours),people:people,res:res,
-    c:c,k:k,gps:g,
+    c:c,k:k,gps:g,tg:Array.isArray(t.tg)?TARGET_IDS.filter(function(id){return t.tg.indexOf(id)>-1}):[],
     createdAt:num(t.createdAt),updatedAt:num(t.updatedAt)};
 }
 function valid(t){return t&&t.id&&RIVER_IDS.indexOf(t.river)>-1&&/^\d{4}-\d{2}-\d{2}$/.test(t.date)}
@@ -73,6 +82,9 @@ function sorted(){return all().sort(function(a,b){return a.date<b.date?1:a.date>
 function cnt(t,sp){return t.c[sp]||0}
 function totalCaught(t){return sum(t.c)}
 function ah(t){return t.hours*t.people}
+function targeted(t,spId){return t.tg.indexOf(targetOf(spId))>-1}
+function targetFish(t){var n=0;SP_IDS.forEach(function(id){if(targeted(t,id))n+=t.c[id]||0});return n}
+function targetText(t){return t.tg.map(targetName).join(' + ')}
 function fmtNum(n){return Number.isInteger(n)?String(n):n.toFixed(1)}
 function r1(n){return fmtNum(Math.round(n*10)/10)}
 function plural(n,w,p){return n+' '+(n===1?w:(p||w+'s'))}
@@ -99,6 +111,7 @@ function detail(t){
   function add(k,v,raw){if(v!==undefined&&v!==null&&v!=='')rows.push('<div><dt>'+k+'</dt><dd>'+(raw?v:esc(v))+'</dd></div>')}
   add('People fishing',t.people+' ('+resText(t)+')');
   add('Hours fished',r1(t.hours)+' h · '+r1(ah(t))+' angler-hours');
+  add('Target',targetText(t)||'Not recorded');
   add('Catch',catchText(t)||'No fish');
   if(GPS_ENABLED&&t.gps)add('Location',esc(gpsText(t.gps))+' · <a href="https://www.google.com/maps/search/?api=1&query='+t.gps.lat.toFixed(6)+','+t.gps.lon.toFixed(6)+'" target="_blank" rel="noopener">Map</a>',true);
   return '<div class="e-body"><dl>'+rows.join('')+'</dl><div class="e-actions"><button type="button" data-act="edit" data-id="'+esc(t.id)+'">Edit</button><button type="button" data-act="copy" data-id="'+esc(t.id)+'">Log another like this</button><button type="button" class="danger" data-act="del" data-id="'+esc(t.id)+'">Delete</button></div></div>';
@@ -110,7 +123,7 @@ function renderTrips(){
   el.innerHTML=list.slice(0,shown).map(function(t){
     var any=totalCaught(t);
     var pill=any>0?'<span class="pill hit">'+plural(any,'fish','fish')+'</span>':'<span class="pill blank">No fish</span>';
-    var bits=[riverOf(t.river).short,plural(t.people,'person','people')+' · '+r1(t.hours)+' h'];
+    var bits=[riverOf(t.river).short];if(t.tg.length)bits.push('for '+targetText(t).toLowerCase());bits.push(plural(t.people,'person','people')+' · '+r1(t.hours)+' h');
     var sp=SPECIES.filter(function(x){return t.c[x.id]}).map(function(x){return x.name+' '+t.c[x.id]});
     if(sp.length)bits.push(sp.join(', '));
     return '<details class="entry" data-id="'+esc(t.id)+'"'+(openIds[t.id]?' open':'')+'><summary><div class="e-main"><div class="e-date">'+esc(fmtDate(t.date,true))+'</div><div class="e-sub">'+esc(bits.join(' · '))+'</div></div><div>'+pill+'</div></summary>'+detail(t)+'</details>';
@@ -138,17 +151,29 @@ function renderReport(){
   var el=$('#report'),list=reportTrips();
   $('#exportBC').disabled=!list.length;$('#exportAll').disabled=!list.length;
   if(!list.length){el.innerHTML='<p class="empty">No trips in the '+lyLabel(lyear)+' licence year (April 1 '+lyear+' to March 31 '+(lyear+1)+').</p>';return}
-  var days={},people=0,hrs=0,caught={},kept={},byR={};
+  var days={},people=0,hrs=0,caught={},kept={},byR={},tAh={},tCaught={},inc={},byT={};
   list.forEach(function(t){
     days[t.date]=1;people+=t.people;hrs+=ah(t);
     var r=byR[t.river]||(byR[t.river]={n:0,ah:0,all:0});r.n++;r.ah+=ah(t);r.all+=totalCaught(t);
-    SP_IDS.forEach(function(id){if(t.c[id])caught[id]=(caught[id]||0)+t.c[id];if(t.k[id])kept[id]=(kept[id]||0)+t.k[id]});
+    t.tg.forEach(function(id){var x=byT[id]||(byT[id]={n:0,ah:0,fish:0});x.n++;x.ah+=ah(t)});
+    SP_IDS.forEach(function(id){
+      var c=t.c[id]||0;
+      if(c)caught[id]=(caught[id]||0)+c;if(t.k[id])kept[id]=(kept[id]||0)+t.k[id];
+      if(targeted(t,id)){tAh[id]=(tAh[id]||0)+ah(t);tCaught[id]=(tCaught[id]||0)+c;byT[targetOf(id)].fish+=c}
+      else if(c)inc[id]=(inc[id]||0)+c;
+    });
   });
-  var sp=SPECIES.filter(function(x){return caught[x.id]}).map(function(x){var kp=kept[x.id]||0;return '<tr><td>'+esc(x.name)+'</td><td>'+(caught[x.id]-kp)+'</td><td>'+(x.keep?kp:'–')+'</td><td class="rate">'+(caught[x.id]/hrs).toFixed(2)+'</td></tr>'}).join('');
+  var sp=SPECIES.filter(function(x){return caught[x.id]||tAh[x.id]}).map(function(x){
+    var kp=kept[x.id]||0;
+    return '<tr><td>'+esc(x.name)+'</td><td>'+(caught[x.id]||0)+'</td><td>'+(x.keep?kp:'–')+'</td><td class="rate">'+(tAh[x.id]?(tCaught[x.id]/tAh[x.id]).toFixed(2):'–')+'</td><td>'+(inc[x.id]||0)+'</td></tr>';
+  }).join('');
+  var tr=TARGETS.filter(function(x){return byT[x.id]}).map(function(x){var v=byT[x.id];return '<tr><td>'+esc(x.name)+'</td><td>'+v.n+'</td><td>'+r1(v.ah)+'</td><td>'+v.fish+'</td><td class="rate">'+(v.ah?(v.fish/v.ah).toFixed(2):'–')+'</td></tr>'}).join('');
   var rv=RIVERS.filter(function(r){return byR[r.id]}).map(function(r){var x=byR[r.id];return '<tr><td>'+esc(r.short)+'</td><td>'+x.n+'</td><td>'+r1(x.ah)+'</td><td>'+x.all+'</td><td class="rate">'+(x.ah?(x.all/x.ah).toFixed(2):'–')+'</td></tr>'}).join('');
   el.innerHTML='<ul class="facts"><li><b>'+Object.keys(days).length+'</b> guided '+(Object.keys(days).length===1?'day':'days')+' · <b>'+list.length+'</b> '+(list.length===1?'group':'groups')+' · <b>'+people+'</b> anglers · <b>'+r1(hrs)+'</b> angler-hours</li></ul>'+
-    (sp?'<div class="tablewrap"><table class="dt"><thead><tr><th>Species</th><th>Released</th><th>Retained</th><th>Per hr</th></tr></thead><tbody>'+sp+'</tbody></table></div>':'<p class="empty" style="margin-top:12px">No fish logged this licence year.</p>')+
-    '<h3 class="subh">By river</h3><div class="tablewrap"><table class="dt"><thead><tr><th>River</th><th>Trips</th><th>Ang-hrs</th><th>Fish</th><th>Per hr</th></tr></thead><tbody>'+rv+'</tbody></table></div>';
+    (sp?'<div class="tablewrap"><table class="dt"><thead><tr><th>Species</th><th>Caught</th><th>Kept</th><th>Per hr*</th><th>Bycatch</th></tr></thead><tbody>'+sp+'</tbody></table></div>'+
+      '<p class="legend"><b>*Per hr</b> is targeted catch per angler-hour. It counts only trips that were fishing for that species, so bycatch on other trips doesn\'t lower it. <b>Bycatch</b> is fish caught while targeting something else.</p>':'<p class="empty" style="margin-top:12px">No fish logged this licence year.</p>')+
+    (tr?'<h3 class="subh">Effort by target</h3><div class="tablewrap"><table class="dt"><thead><tr><th>Target</th><th>Trips</th><th>Ang-hrs</th><th>Fish</th><th>Per hr</th></tr></thead><tbody>'+tr+'</tbody></table></div>':'')+
+    '<h3 class="subh">By river</h3><div class="tablewrap"><table class="dt"><thead><tr><th>River</th><th>Trips</th><th>Ang-hrs</th><th>All fish</th><th>Per hr</th></tr></thead><tbody>'+rv+'</tbody></table></div>';
 }
 function renderSettings(){
   $$('#fmt button').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-v')===settings.fmt))});
@@ -181,6 +206,7 @@ function buildForm(){
       return '<div class="row"><span>'+esc(x.name)+'</span>'+stepperHtml('c-'+x.id,0,'sm',0,500,x.name+' caught')+'</div>';
     }).join('');
   }).join('');
+  $('#f-target').innerHTML=TARGETS.map(function(x){return '<button type="button" class="chip" data-v="'+x.id+'" aria-pressed="false">'+esc(x.name)+'</button>'}).join('');
   $('#kept-box').innerHTML=SPECIES.filter(function(x){return x.keep}).map(function(x){
     return '<div class="row"><span>'+esc(x.name)+' retained</span>'+stepperHtml('k-'+x.id,0,'sm',0,500,x.name+' retained')+'</div>';
   }).join('');
@@ -199,6 +225,7 @@ function openSheet(id,copyFrom){
   $$('input[name=river]').forEach(function(r){r.checked=!!src&&r.value===src.river});
   RES_IDS.forEach(function(k){$('#r-'+k).value=src?(src.res[k]||0):0});
   $('#f-hours').value=t?t.hours:'';
+  $$('#f-target .chip').forEach(function(b){b.setAttribute('aria-pressed',String(!!src&&src.tg.indexOf(b.getAttribute('data-v'))>-1))});
   SP_IDS.forEach(function(k){$('#c-'+k).value=t?(t.c[k]||0):0});
   KEEP_IDS.forEach(function(k){$('#k-'+k).value=t?(t.k[k]||0):0});
   setKeptMode(!!t&&sum(t.k)>0);
@@ -275,13 +302,15 @@ function readForm(){
   if(!rv)return fail('Pick the waterbody.','#f-rivers input');
   if(!(sum(res)>=1))return fail('Add at least one person fishing.','#r-bc');
   if(!(hours>0&&hours<=24))return fail('Enter the hours fished, up to 24.','#f-hours');
+  var tg=$$('#f-target .chip[aria-pressed="true"]').map(function(b){return b.getAttribute('data-v')});
+  if(!tg.length)return fail('Pick what the group was targeting.','#f-target .chip');
   var c={},k={};
   for(var i=0;i<SP_IDS.length;i++){
     var id=SP_IDS[i],n=val('c-'+id),kp=keptMode&&canKeep(id)?val('k-'+id):0;
     if(kp>n)return fail('Retained cannot be more than caught for '+spName(id).toLowerCase()+'.','#k-'+id);
     if(n>0)c[id]=n;if(kp>0)k[id]=kp;
   }
-  var t={id:editingId||newId(),date:date,river:rv.value,hours:hours,res:res,c:c,v:1};
+  var t={id:editingId||newId(),date:date,river:rv.value,hours:hours,res:res,tg:tg,c:c,v:1};
   if(Object.keys(k).length)t.k=k;
   if(GPS_ENABLED&&formGps)t.gps=formGps;
   else if(editingId){var prev=trips.filter(function(x){return x.id===editingId})[0];if(prev&&prev.gps)t.gps=prev.gps}
@@ -323,27 +352,39 @@ async function deliver(filename,text,mime){
 }
 function cpue(fish,anglerHours){return anglerHours>0?Math.round(1000*fish/anglerHours)/1000:''}
 function r2(n){return Math.round(n*100)/100}
-function bcRows(list){
-  /* species columns are fish released; hatchery coho and pink also get a retained column */
-  var head=['Date (yyyy-mm-dd)','Waterbody','B.C. residents','Non-residents','Non-resident aliens','Hours fished','Angler-hours'];
-  SPECIES.forEach(function(x){head.push(x.name);if(x.keep)head.push(x.name+' retained')});
-  head.push('Total fish','CPUE (fish per angler-hour)');
-  var rows=[head],tot=null;
-  list.forEach(function(t){
-    var r=[t.date,riverOf(t.river).name,t.res.bc||0,t.res.nr||0,t.res.nra||0,t.hours,r2(ah(t))];
-    SPECIES.forEach(function(x){var c=t.c[x.id]||0,k=t.k[x.id]||0;r.push(c-k);if(x.keep)r.push(k)});
-    r.push(totalCaught(t),cpue(totalCaught(t),ah(t)));
-    rows.push(r);
-    if(!tot)tot=r.map(function(){return 0});
-    for(var i=2;i<r.length-1;i++)tot[i]+=r[i];
+/* columns: {h:header, v:value(trip), add:true to sum in the totals row, tot:function(list) for a computed total} */
+function sumOver(list,f){var n=0;list.forEach(function(t){n+=f(t)});return n}
+function fishCols(){
+  var cols=[];
+  SPECIES.forEach(function(x){
+    cols.push({h:x.name,v:function(t){return (t.c[x.id]||0)-(t.k[x.id]||0)},add:true});
+    if(x.keep)cols.push({h:x.name+' retained',v:function(t){return t.k[x.id]||0},add:true});
   });
-  if(tot){
-    tot[0]='Total';tot[1]=plural(list.length,'trip');
-    tot[5]=r2(tot[5]);tot[6]=r2(tot[6]);
-    tot[tot.length-1]=cpue(tot[tot.length-2],tot[6]);
-    rows.push(tot);
+  var tl=function(l){return l.filter(function(t){return t.tg.length})};
+  return cols.concat([
+    {h:'Total fish',v:totalCaught,add:true},
+    {h:'CPUE, all fish (per angler-hour)',v:function(t){return cpue(totalCaught(t),ah(t))},tot:function(l){return cpue(sumOver(l,totalCaught),sumOver(l,ah))}},
+    {h:'Target fish',v:targetFish,add:true},
+    {h:'Target CPUE (per angler-hour)',v:function(t){return t.tg.length?cpue(targetFish(t),ah(t)):''},tot:function(l){return cpue(sumOver(tl(l),targetFish),sumOver(tl(l),ah))}}
+  ]);
+}
+function buildTable(list,cols){
+  var rows=[cols.map(function(c){return c.h})];
+  list.forEach(function(t){rows.push(cols.map(function(c){return c.v(t)}))});
+  if(list.length){
+    var tot=cols.map(function(c){return c.tot?c.tot(list):(c.add?r2(sumOver(list,function(t){return +c.v(t)||0})):'')});
+    tot[0]='Total';tot[1]=plural(list.length,'trip');rows.push(tot);
   }
   return rows;
+}
+function bcRows(list){
+  return buildTable(list,[
+    {h:'Date (yyyy-mm-dd)',v:function(t){return t.date}},{h:'Waterbody',v:function(t){return riverOf(t.river).name}},
+    {h:'B.C. residents',v:function(t){return t.res.bc||0},add:true},{h:'Non-residents',v:function(t){return t.res.nr||0},add:true},
+    {h:'Non-resident aliens',v:function(t){return t.res.nra||0},add:true},
+    {h:'Hours fished',v:function(t){return t.hours},add:true},{h:'Angler-hours',v:function(t){return r2(ah(t))},add:true},
+    {h:'Target species',v:targetText}
+  ].concat(fishCols()));
 }
 var XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 function sendTable(base,sheet,rows){
@@ -358,26 +399,15 @@ function exportBC(){
   sendTable('bc-guide-report-'+slug(settings.guide),'BC report',bcRows(list));
 }
 function allRows(list){
-  var head=['Date','River'].concat(GPS_ENABLED?['Latitude','Longitude','GPS accuracy (m)']:[]).concat(['Hours fished','People fishing','B.C. residents','Non-residents','Non-resident aliens','Angler-hours']);
-  SPECIES.forEach(function(x){head.push(x.name);if(x.keep)head.push(x.name+' retained')});
-  head=head.concat(['Total fish','CPUE (fish per angler-hour)','Guide','Guide licence']);
-  var rows=[head],tot=null,first=GPS_ENABLED?5:2,n=head.length;
-  list.forEach(function(t){
-    var g=t.gps;
-    var r=[t.date,riverOf(t.river).name].concat(GPS_ENABLED?[g?g.lat.toFixed(6):'',g?g.lon.toFixed(6):'',g&&g.acc?Math.round(g.acc):'']:[]).concat([t.hours,t.people,t.res.bc||0,t.res.nr||0,t.res.nra||0,r2(ah(t))]);
-    SPECIES.forEach(function(x){var c=t.c[x.id]||0,k=t.k[x.id]||0;r.push(c-k);if(x.keep)r.push(k)});
-    r=r.concat([totalCaught(t),cpue(totalCaught(t),ah(t)),settings.guide,settings.licence]);
-    rows.push(r);
-    if(!tot)tot=r.map(function(){return ''});
-    for(var i=first;i<n-3;i++)tot[i]=(tot[i]||0)+r[i];
-  });
-  if(tot){
-    tot[0]='Total';tot[1]=plural(list.length,'trip');
-    tot[first]=r2(tot[first]);tot[first+5]=r2(tot[first+5]);
-    tot[n-3]=cpue(tot[n-4],tot[first+5]);
-    rows.push(tot);
-  }
-  return rows;
+  var g=function(f){return function(t){return t.gps?f(t.gps):''}};
+  return buildTable(list,[
+    {h:'Date',v:function(t){return t.date}},{h:'River',v:function(t){return riverOf(t.river).name}}
+  ].concat(GPS_ENABLED?[{h:'Latitude',v:g(function(p){return p.lat.toFixed(6)})},{h:'Longitude',v:g(function(p){return p.lon.toFixed(6)})},{h:'GPS accuracy (m)',v:g(function(p){return p.acc?Math.round(p.acc):''})}]:[]).concat([
+    {h:'Hours fished',v:function(t){return t.hours},add:true},{h:'People fishing',v:function(t){return t.people},add:true},
+    {h:'B.C. residents',v:function(t){return t.res.bc||0},add:true},{h:'Non-residents',v:function(t){return t.res.nr||0},add:true},
+    {h:'Non-resident aliens',v:function(t){return t.res.nra||0},add:true},{h:'Angler-hours',v:function(t){return r2(ah(t))},add:true},
+    {h:'Target species',v:targetText}
+  ]).concat(fishCols()).concat([{h:'Guide',v:function(){return settings.guide}},{h:'Guide licence',v:function(){return settings.licence}}]));
 }
 function exportAll(){
   var list=reportTrips();if(!list.length)return;
@@ -457,6 +487,7 @@ function bind(){
   $('#f-date').addEventListener('change',function(){dateTouched=true});
   $('#tripForm').addEventListener('input',updateReadout);
   $('#keptToggle').addEventListener('click',function(){setKeptMode(!keptMode)});
+  $('#f-target').addEventListener('click',function(e){var b=e.target.closest('.chip');if(!b)return;b.setAttribute('aria-pressed',String(b.getAttribute('aria-pressed')!=='true'));$('#formMsg').textContent=''});
   $('#tripForm').addEventListener('click',function(e){
     var st=e.target.closest('.stepper button');
     if(st){

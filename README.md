@@ -16,6 +16,7 @@ After each trip, tap **Log a trip** and fill in:
 - the date and waterbody
 - the people fishing, by residency
 - the hours fished
+- the target species (what the group was fishing for)
 - the fish caught by species (hatchery or wild for chinook and coho), and any salmon kept
 
 You can log several trips in a day.

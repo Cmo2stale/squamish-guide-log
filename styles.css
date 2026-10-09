@@ -167,3 +167,6 @@ details.idhelp ul{margin:8px 0 0;padding-left:18px;display:flex;flex-direction:c
 .rows.retained{padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 
 .fmt-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px}
+
+.dt td:first-child{white-space:normal;min-width:7.5em}
+.dt th,.dt td{padding-left:6px;padding-right:6px}
