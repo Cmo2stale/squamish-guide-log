@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.7.0';
+var APP_VERSION='1.7.1';
 var GPS_ENABLED=false; /* set to true to bring back GPS location on trips */
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
@@ -414,6 +414,7 @@ function bind(){
   $('#s-guide').addEventListener('input',function(e){settings.guide=e.target.value.trim();saveSettings();$('#bk-sub').textContent=settings.guide});
   $('#s-licence').addEventListener('input',function(e){settings.licence=e.target.value.trim();saveSettings()});
   $('#s-gps').addEventListener('click',function(e){var b=e.target.closest('.chip');if(!b)return;settings.gps=b.getAttribute('data-v');saveSettings();renderSettings()});
+  if($('#updateBtn'))$('#updateBtn').addEventListener('click',checkForUpdate);
   $('#installBtn').addEventListener('click',async function(){if(!deferredInstall)return;deferredInstall.prompt();try{await deferredInstall.userChoice}catch(e){}deferredInstall=null;renderSettings()});
   $('#notice').addEventListener('click',function(e){
     var b=e.target.closest('button[data-act]');if(!b)return;
@@ -462,7 +463,24 @@ function registerSW(){
     if(reg.waiting&&navigator.serviceWorker.controller){swWaiting=reg.waiting;renderNotice()}
     if(reg.installing)watch(reg.installing);
     reg.addEventListener('updatefound',function(){if(reg.installing)watch(reg.installing)});
+    swReg=reg;
+    /* phones often resume the app instead of relaunching it, so check for a new version whenever it comes back to the screen */
+    document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&navigator.onLine!==false){try{reg.update()}catch(e){}}});
+    setInterval(function(){if(navigator.onLine!==false){try{reg.update()}catch(e){}}},30*60*1000);
   }).catch(function(){});
+}
+var swReg=null;
+async function checkForUpdate(){
+  var btn=$('#updateBtn');
+  if(navigator.onLine===false){toast('No signal. Check for updates when you\'re back in service.');return}
+  if(!swReg){location.reload();return}
+  btn.disabled=true;btn.textContent='Checking…';
+  try{await swReg.update()}catch(e){}
+  await new Promise(function(r){setTimeout(r,1500)});
+  btn.disabled=false;btn.textContent='Check for updates';
+  var w=swReg.waiting||swReg.installing;
+  if(w){toast('Updating…');if(swReg.waiting)swReg.waiting.postMessage('skipWaiting');else w.addEventListener('statechange',function(){if(w.state==='installed')w.postMessage('skipWaiting')})}
+  else toast('You have the latest version ('+APP_VERSION+').');
 }
 
 /* ---------- start ---------- */
