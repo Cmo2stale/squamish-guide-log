@@ -76,9 +76,19 @@
         <div class="btnrow" style="margin-top:4px">
           <button type="button" class="ghost" id="backupBtn">Save a backup file</button>
           <button type="button" class="ghost" id="restoreBtn">Restore from a backup</button>
-          <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+          <input type="file" id="restoreFile" accept=".json,.txt,application/json,text/plain" hidden>
         </div>
-        <p class="hint">Your trips live only on this phone. Save a backup now and then, and email it to yourself or keep it in Files or Drive. Restoring merges trips; it never deletes any.</p>
+        <p class="hint">Your trips live only on this phone. Save a backup every few weeks and keep it somewhere safe.</p>
+        <details class="idhelp">
+          <summary>How backups work</summary>
+          <ul>
+            <li><b>What it is:</b> one file with every trip on this phone, all seasons. It's how you get your trips back if your phone is lost, broken or replaced.</li>
+            <li><b>Where to keep it:</b> email it to yourself, or save it to Files, Google Drive or iCloud. Keep the newest one; older ones are fine to delete.</li>
+            <li><b>It looks strange, and that's normal.</b> If you open it you'll see text, quotation marks and long numbers. That's the app's own format, not a spreadsheet. The long numbers are trip IDs and save times.</li>
+            <li><b>Don't edit it.</b> Changing anything in the file can stop it from restoring. For a copy you can read, use the trip spreadsheet export instead.</li>
+            <li><b>To restore:</b> open the app on the new or reset phone, tap <b>Restore from a backup</b> and pick the file. Trips already on the phone are kept. Restoring only adds, it never deletes.</li>
+          </ul>
+        </details>
       </div>
       <div class="field">
         <span class="lab">Install</span>
