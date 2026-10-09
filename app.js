@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.1.1';
+var APP_VERSION='1.1.2';
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -29,9 +29,9 @@ var RIVERS=[
 var RIVER_IDS=RIVERS.map(function(r){return r.id});
 function riverOf(id){return RIVERS.filter(function(r){return r.id===id})[0]||{id:id,name:id,short:id}}
 var SPECIES=[
-  {id:'bull',name:'Bull trout'},{id:'chum',name:'Chum'},{id:'coho',name:'Coho'},
-  {id:'cutthroat',name:'Cutthroat'},{id:'pink',name:'Pink'},{id:'rainbow',name:'Rainbow trout'},
-  {id:'sockeye',name:'Sockeye'},{id:'chinook',name:'Spring salmon'},{id:'steelhead',name:'Steelhead'}
+  {id:'bull',name:'Bull trout'},{id:'chinook',name:'Chinook'},{id:'chum',name:'Chum'},
+  {id:'coho',name:'Coho'},{id:'cutthroat',name:'Cutthroat'},{id:'pink',name:'Pink'},
+  {id:'rainbow',name:'Rainbow trout'},{id:'sockeye',name:'Sockeye'},{id:'steelhead',name:'Steelhead'}
 ];
 var SP_IDS=SPECIES.map(function(x){return x.id});
 function spName(id){for(var i=0;i<SPECIES.length;i++){if(SPECIES[i].id===id)return SPECIES[i].name}return id}
