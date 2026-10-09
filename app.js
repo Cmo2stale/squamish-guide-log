@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.6.0';
+var APP_VERSION='1.7.0';
 var GPS_ENABLED=false; /* set to true to bring back GPS location on trips */
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
@@ -30,11 +30,13 @@ var RIVERS=[
 var RIVER_IDS=RIVERS.map(function(r){return r.id});
 function riverOf(id){return RIVERS.filter(function(r){return r.id===id})[0]||{id:id,name:id,short:id}}
 var SPECIES=[
-  {id:'bull',name:'Bull trout'},{id:'chinook_h',name:'Chinook, hatchery'},{id:'chinook_w',name:'Chinook, wild'},
-  {id:'chum',name:'Chum'},{id:'coho_h',name:'Coho, hatchery',keep:true},{id:'coho_w',name:'Coho, wild'},
-  {id:'cutthroat',name:'Cutthroat'},{id:'pink',name:'Pink',keep:true},{id:'rainbow',name:'Rainbow trout'},
-  {id:'sockeye',name:'Sockeye'},{id:'steelhead',name:'Steelhead'}
+  {id:'bull',name:'Bull trout',g:'trout'},{id:'cutthroat',name:'Cutthroat trout',g:'trout'},
+  {id:'rainbow',name:'Rainbow trout',g:'trout'},{id:'steelhead',name:'Steelhead',g:'trout'},
+  {id:'chinook_h',name:'Chinook, hatchery',g:'salmon'},{id:'chinook_w',name:'Chinook, wild',g:'salmon'},
+  {id:'chum',name:'Chum',g:'salmon'},{id:'coho_h',name:'Coho, hatchery',g:'salmon',keep:true},{id:'coho_w',name:'Coho, wild',g:'salmon'},
+  {id:'pink',name:'Pink',g:'salmon',keep:true},{id:'sockeye',name:'Sockeye',g:'salmon'}
 ];
+var GROUPS=[{id:'trout',name:'Trout and char'},{id:'salmon',name:'Salmon'}];
 var LEGACY={chinook:'chinook_w',coho:'coho_w'}; /* trips logged before hatchery/wild split */
 var SP_IDS=SPECIES.map(function(x){return x.id});
 var KEEP_IDS=SPECIES.filter(function(x){return x.keep}).map(function(x){return x.id});
@@ -173,8 +175,10 @@ function stepperHtml(id,val,cls,min,max,label){
 function buildForm(){
   $('#f-rivers').innerHTML=RIVERS.map(function(r){return '<label><input type="radio" name="river" value="'+r.id+'"><span>'+esc(r.name)+'</span></label>'}).join('');
   $('#res-rows').innerHTML=RES.map(function(x){return '<div class="row"><span>'+esc(x.name)+'</span>'+stepperHtml('r-'+x.id,0,'sm',0,60,x.name)+'</div>'}).join('');
-  $('#sp-grid').innerHTML=SPECIES.map(function(x){
-    return '<div class="row"><span>'+esc(x.name)+'</span>'+stepperHtml('c-'+x.id,0,'sm',0,500,x.name+' caught')+'</div>';
+  $('#sp-grid').innerHTML=GROUPS.map(function(g){
+    return '<div class="sp-group"><span>'+esc(g.name)+'</span></div>'+SPECIES.filter(function(x){return x.g===g.id}).map(function(x){
+      return '<div class="row"><span>'+esc(x.name)+'</span>'+stepperHtml('c-'+x.id,0,'sm',0,500,x.name+' caught')+'</div>';
+    }).join('');
   }).join('');
   $('#kept-box').innerHTML=SPECIES.filter(function(x){return x.keep}).map(function(x){
     return '<div class="row"><span>'+esc(x.name)+' retained</span>'+stepperHtml('k-'+x.id,0,'sm',0,500,x.name+' retained')+'</div>';
