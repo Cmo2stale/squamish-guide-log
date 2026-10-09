@@ -1,7 +1,7 @@
 /* Offline cache for Squamish Guide Log. Bump VERSION whenever any app file changes. */
-var VERSION='sgl-v1.8.1';
+var VERSION='sgl-v1.9.0';
 var FONT_CACHE='sgl-fonts';
-var SHELL=['./','index.html','styles.css','app.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','icons/icon-maskable-512.png'];
+var SHELL=['./','index.html','styles.css','app.js','xlsx.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/apple-touch-icon.png','icons/icon-maskable-512.png'];
 
 self.addEventListener('install',function(e){
   /* cache:'reload' skips the browser's HTTP cache, so a new version never mixes in stale files */

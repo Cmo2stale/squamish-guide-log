@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.8.1';
+var APP_VERSION='1.9.0';
 var GPS_ENABLED=false; /* set to true to bring back GPS location on trips */
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
@@ -14,7 +14,7 @@ function lsGet(k){try{return localStorage.getItem(k)}catch(e){storageOk=false;re
 function lsSet(k,v){try{localStorage.setItem(k,v);return true}catch(e){storageOk=false;return false}}
 function loadJSON(k,d){try{var v=JSON.parse(lsGet(k)||'null');return v==null?d:v}catch(e){return d}}
 var trips=loadJSON(K_TRIPS,[]);if(!Array.isArray(trips))trips=[];
-var settings=Object.assign({guide:'',licence:'',gps:'auto',lastBackup:0,lastBc:2},loadJSON(K_SET,{}));
+var settings=Object.assign({guide:'',licence:'',gps:'auto',lastBackup:0,lastBc:2,fmt:'csv'},loadJSON(K_SET,{}));
 function saveTrips(){var ok=lsSet(K_TRIPS,JSON.stringify(trips));if(!ok)toast('Could not save on this phone. Storage may be full or blocked.');return ok}
 function saveSettings(){lsSet(K_SET,JSON.stringify(settings))}
 function askPersist(){try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}}
@@ -151,6 +151,7 @@ function renderReport(){
     '<h3 class="subh">By river</h3><div class="tablewrap"><table class="dt"><thead><tr><th>River</th><th>Trips</th><th>Ang-hrs</th><th>Fish</th><th>Per hr</th></tr></thead><tbody>'+rv+'</tbody></table></div>';
 }
 function renderSettings(){
+  $$('#fmt button').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-v')===settings.fmt))});
   if(document.activeElement!==$('#s-guide'))$('#s-guide').value=settings.guide||'';
   if(document.activeElement!==$('#s-licence'))$('#s-licence').value=settings.licence||'';
   $$('#s-gps .chip').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-v')===settings.gps))});
@@ -344,9 +345,17 @@ function bcRows(list){
   }
   return rows;
 }
+var XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+function sendTable(base,sheet,rows){
+  var season=lyear+'-'+String(lyear+1).slice(2);
+  if(settings.fmt==='xlsx'&&window.makeXlsx){
+    var bytes;try{bytes=window.makeXlsx(rows,sheet+' '+season)}catch(e){toast('Could not make the Excel file. Try CSV instead.');return}
+    deliver(base+'-'+season+'.xlsx',bytes,XLSX_MIME);
+  }else deliver(base+'-'+season+'.csv',toCsv(rows),'text/csv');
+}
 function exportBC(){
   var list=reportTrips();if(!list.length)return;
-  deliver('bc-guide-report-'+slug(settings.guide)+'-'+lyear+'-'+String(lyear+1).slice(2)+'.csv',toCsv(bcRows(list)),'text/csv');
+  sendTable('bc-guide-report-'+slug(settings.guide),'BC report',bcRows(list));
 }
 function allRows(list){
   var head=['Date','River'].concat(GPS_ENABLED?['Latitude','Longitude','GPS accuracy (m)']:[]).concat(['Hours fished','People fishing','B.C. residents','Non-residents','Non-resident aliens','Angler-hours']);
@@ -372,7 +381,7 @@ function allRows(list){
 }
 function exportAll(){
   var list=reportTrips();if(!list.length)return;
-  deliver('guide-log-trips-'+slug(settings.guide)+'-'+lyear+'-'+String(lyear+1).slice(2)+'.csv',toCsv(allRows(list)),'text/csv');
+  sendTable('guide-log-trips-'+slug(settings.guide),'Trips',allRows(list));
 }
 async function backup(){
   var data={app:'squamish-guide-log',format:1,exportedAt:new Date().toISOString(),settings:{guide:settings.guide,licence:settings.licence},trips:trips};
@@ -426,6 +435,7 @@ function bind(){
   $('#tripForm').addEventListener('submit',onSubmit);
   $('#moreBtn').addEventListener('click',function(){shown+=20;renderTrips()});
   $('#lyear').addEventListener('change',function(e){lyear=parseInt(e.target.value,10);renderReport()});
+  $('#fmt').addEventListener('click',function(e){var b=e.target.closest('button[data-v]');if(!b)return;settings.fmt=b.getAttribute('data-v');saveSettings();renderSettings()});
   $('#exportBC').addEventListener('click',exportBC);
   $('#exportAll').addEventListener('click',exportAll);
   $('#backupBtn').addEventListener('click',backup);
