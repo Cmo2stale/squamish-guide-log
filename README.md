@@ -18,9 +18,9 @@ After each trip, tap **Log a trip** and fill in:
 - the hours fished
 - the fish caught by species, and any that were kept
 
-The phone's GPS location is saved with each trip. You can log several trips in a day.
+You can log several trips in a day.
 
-At the end of the licence year (April to March), tap **Export for the BC report**. You get a CSV with one row per group, laid out in the same order as the province's Freshwater Angling Guide Report web form. **Full trip spreadsheet** exports every trip, including GPS location.
+At the end of the licence year (April to March), tap **Export for the BC report**. You get a CSV with one row per group, laid out in the same order as the province's Freshwater Angling Guide Report web form. **Full trip spreadsheet** exports every trip.
 
 ## Your data
 

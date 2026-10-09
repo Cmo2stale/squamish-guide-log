@@ -1,7 +1,8 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.1.2';
+var APP_VERSION='1.2.0';
+var GPS_ENABLED=false; /* set to true to bring back GPS location on trips */
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -92,7 +93,7 @@ function detail(t){
   add('People fishing',t.people+' ('+resText(t)+')');
   add('Hours fished',r1(t.hours)+' h · '+r1(ah(t))+' angler-hours');
   add('Catch',catchText(t)||'No fish');
-  if(t.gps)add('Location',esc(gpsText(t.gps))+' · <a href="https://www.google.com/maps/search/?api=1&query='+t.gps.lat.toFixed(6)+','+t.gps.lon.toFixed(6)+'" target="_blank" rel="noopener">Map</a>',true);
+  if(GPS_ENABLED&&t.gps)add('Location',esc(gpsText(t.gps))+' · <a href="https://www.google.com/maps/search/?api=1&query='+t.gps.lat.toFixed(6)+','+t.gps.lon.toFixed(6)+'" target="_blank" rel="noopener">Map</a>',true);
   return '<div class="e-body"><dl>'+rows.join('')+'</dl><div class="e-actions"><button type="button" data-act="edit" data-id="'+esc(t.id)+'">Edit</button><button type="button" data-act="copy" data-id="'+esc(t.id)+'">Log another like this</button><button type="button" class="danger" data-act="del" data-id="'+esc(t.id)+'">Delete</button></div></div>';
 }
 function renderTrips(){
@@ -193,7 +194,7 @@ function openSheet(id,copyFrom){
   opener=document.activeElement;
   $('#sheet').hidden=false;document.body.style.overflow='hidden';
   $('#sheet-title').focus();
-  if(!t&&settings.gps==='auto')getGps(true);
+  if(GPS_ENABLED&&!t&&settings.gps==='auto')getGps(true);
 }
 function closeSheet(){
   stopGps();
@@ -269,7 +270,8 @@ function readForm(){
   }
   var t={id:editingId||newId(),date:date,river:rv.value,hours:hours,res:res,c:c,v:1};
   if(Object.keys(k).length)t.k=k;
-  if(formGps)t.gps=formGps;
+  if(GPS_ENABLED&&formGps)t.gps=formGps;
+  else if(editingId){var prev=trips.filter(function(x){return x.id===editingId})[0];if(prev&&prev.gps)t.gps=prev.gps}
   return t;
 }
 function onSubmit(e){
@@ -322,14 +324,14 @@ function exportBC(){
   deliver('bc-guide-report-'+slug(settings.guide)+'-'+lyear+'-'+String(lyear+1).slice(2)+'.csv',toCsv(bcRows(list)),'text/csv');
 }
 function allRows(list){
-  var head=['date','river','latitude','longitude','gps_accuracy_m','hours_fished','people_fishing','bc_residents','non_residents','non_resident_aliens','angler_hours'];
+  var head=['date','river'].concat(GPS_ENABLED?['latitude','longitude','gps_accuracy_m']:[]).concat(['hours_fished','people_fishing','bc_residents','non_residents','non_resident_aliens','angler_hours']);
   SPECIES.forEach(function(x){head.push(x.id+'_caught');head.push(x.id+'_kept')});
   head=head.concat(['total_fish','fish_per_angler_hour','guide','guide_licence']);
   var rows=[head];
   function q(n,d){return d>0?Math.round(1000*n/d)/1000:''}
   list.forEach(function(t){
     var g=t.gps;
-    var r=[t.date,riverOf(t.river).name,g?g.lat.toFixed(6):'',g?g.lon.toFixed(6):'',g&&g.acc?Math.round(g.acc):'',t.hours,t.people,t.res.bc||0,t.res.nr||0,t.res.nra||0,Math.round(ah(t)*100)/100];
+    var r=[t.date,riverOf(t.river).name].concat(GPS_ENABLED?[g?g.lat.toFixed(6):'',g?g.lon.toFixed(6):'',g&&g.acc?Math.round(g.acc):'']:[]).concat([t.hours,t.people,t.res.bc||0,t.res.nr||0,t.res.nra||0,Math.round(ah(t)*100)/100]);
     SPECIES.forEach(function(x){r.push(t.c[x.id]||0);r.push(t.k[x.id]||0)});
     r=r.concat([totalCaught(t),q(totalCaught(t),ah(t)),settings.guide,settings.licence]);
     rows.push(r);
@@ -452,6 +454,8 @@ function registerSW(){
 }
 
 /* ---------- start ---------- */
-buildForm();bind();updateToday();render();registerSW();
+buildForm();bind();updateToday();
+if(!GPS_ENABLED){$('#gpsField').hidden=true;$('#gpsSetting').hidden=true}
+render();registerSW();
 window.__sgl={mergeBackup:mergeBackup,bcRows:bcRows,allRows:allRows,all:all,licenceStart:licenceStart};
 })();
