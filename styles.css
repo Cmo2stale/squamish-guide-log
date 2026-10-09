@@ -163,3 +163,5 @@ details.idhelp ul{margin:8px 0 0;padding-left:18px;display:flex;flex-direction:c
 .sp-group span{font:600 12px var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
 .sp-group em{font-style:normal;font-size:13px;color:var(--muted)}
 .sp-group:not(:first-child){margin-top:10px}
+
+.rows.retained{padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}

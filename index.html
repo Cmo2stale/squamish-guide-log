@@ -142,8 +142,9 @@
         <fieldset class="field">
           <legend>Fish caught</legend>
           <div class="rows" id="sp-grid"></div>
-          <div class="chips"><button type="button" class="chip" id="keptToggle" aria-pressed="false">Some salmon were kept</button></div>
-          <p class="hint">Count every fish landed. Salmon not marked as kept are reported as released.</p>
+          <p class="hint">Count every fish landed, including any you keep.</p>
+          <div class="chips"><button type="button" class="chip" id="keptToggle" aria-pressed="false">Salmon retained?</button></div>
+          <div class="rows retained" id="kept-box" hidden></div>
         </fieldset>
         <p class="readout" id="readout" aria-live="polite"></p>
       </div>
