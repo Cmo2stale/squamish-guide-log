@@ -158,3 +158,8 @@ details.idhelp summary{cursor:pointer;font-weight:600}
 details.idhelp ul{margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
 .sub-fields{display:flex;flex-direction:column;gap:12px}
 @media (prefers-reduced-motion:no-preference){.toast{animation:pop .18s ease-out}@keyframes pop{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}}
+
+.sp-group{grid-column:1/-1;display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-top:6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.sp-group span{font:600 12px var(--f-mono);letter-spacing:.06em;text-transform:uppercase}
+.sp-group em{font-style:normal;font-size:13px;color:var(--muted)}
+.sp-group:not(:first-child){margin-top:10px}
