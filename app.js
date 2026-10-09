@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.5.0';
+var APP_VERSION='1.5.1';
 var GPS_ENABLED=false; /* set to true to bring back GPS location on trips */
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
@@ -134,7 +134,7 @@ function renderReport(){
   }
   s.value=String(lyear);
   var el=$('#report'),list=reportTrips();
-  $('#exportBC').disabled=!list.length;$('#exportAll').disabled=!all().length;
+  $('#exportBC').disabled=!list.length;$('#exportAll').disabled=!list.length;
   if(!list.length){el.innerHTML='<p class="empty">No trips in the '+lyLabel(lyear)+' licence year (April 1 '+lyear+' to March 31 '+(lyear+1)+').</p>';return}
   var days={},people=0,hrs=0,caught={},kept={},byR={};
   list.forEach(function(t){
@@ -345,8 +345,8 @@ function allRows(list){
   return rows;
 }
 function exportAll(){
-  var list=all().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:a.createdAt-b.createdAt});if(!list.length)return;
-  deliver('guide-log-all-trips-'+slug(settings.guide)+'-'+todayStr()+'.csv',toCsv(allRows(list)),'text/csv');
+  var list=reportTrips();if(!list.length)return;
+  deliver('guide-log-trips-'+slug(settings.guide)+'-'+lyear+'-'+String(lyear+1).slice(2)+'.csv',toCsv(allRows(list)),'text/csv');
 }
 async function backup(){
   var data={app:'squamish-guide-log',format:1,exportedAt:new Date().toISOString(),settings:{guide:settings.guide,licence:settings.licence},trips:trips};
