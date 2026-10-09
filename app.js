@@ -1,7 +1,7 @@
 /* Squamish Guide Log — everything is stored on this device (localStorage). No accounts, no server. */
 (function(){
 'use strict';
-var APP_VERSION='1.7.1';
+var APP_VERSION='1.8.0';
 var GPS_ENABLED=false; /* set to true to bring back GPS location on trips */
 var $=function(s,r){return (r||document).querySelector(s)};
 var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
@@ -320,15 +320,28 @@ async function deliver(filename,text,mime){
   setTimeout(function(){URL.revokeObjectURL(url);a.remove()},4000);
   return true;
 }
+function cpue(fish,anglerHours){return anglerHours>0?Math.round(1000*fish/anglerHours)/1000:''}
+function r2(n){return Math.round(n*100)/100}
 function bcRows(list){
-  var head=['Date (yyyy-mm-dd)','Waterbody','B.C. residents','Non-residents','Non-resident aliens'];
-  SPECIES.forEach(function(x){head.push(x.name+' released');if(x.keep)head.push(x.name+' kept')});
-  var rows=[head];
+  /* species columns are fish released; hatchery coho and pink also get a retained column */
+  var head=['Date (yyyy-mm-dd)','Waterbody','B.C. residents','Non-residents','Non-resident aliens','Hours fished','Angler-hours'];
+  SPECIES.forEach(function(x){head.push(x.name);if(x.keep)head.push(x.name+' retained')});
+  head.push('Total fish','CPUE (fish per angler-hour)');
+  var rows=[head],tot=null;
   list.forEach(function(t){
-    var r=[t.date,riverOf(t.river).name,t.res.bc||0,t.res.nr||0,t.res.nra||0];
+    var r=[t.date,riverOf(t.river).name,t.res.bc||0,t.res.nr||0,t.res.nra||0,t.hours,r2(ah(t))];
     SPECIES.forEach(function(x){var c=t.c[x.id]||0,k=t.k[x.id]||0;r.push(c-k);if(x.keep)r.push(k)});
+    r.push(totalCaught(t),cpue(totalCaught(t),ah(t)));
     rows.push(r);
+    if(!tot)tot=r.map(function(){return 0});
+    for(var i=2;i<r.length-1;i++)tot[i]+=r[i];
   });
+  if(tot){
+    tot[0]='Total';tot[1]=plural(list.length,'trip');
+    tot[5]=r2(tot[5]);tot[6]=r2(tot[6]);
+    tot[tot.length-1]=cpue(tot[tot.length-2],tot[6]);
+    rows.push(tot);
+  }
   return rows;
 }
 function exportBC(){
@@ -336,18 +349,25 @@ function exportBC(){
   deliver('bc-guide-report-'+slug(settings.guide)+'-'+lyear+'-'+String(lyear+1).slice(2)+'.csv',toCsv(bcRows(list)),'text/csv');
 }
 function allRows(list){
-  var head=['date','river'].concat(GPS_ENABLED?['latitude','longitude','gps_accuracy_m']:[]).concat(['hours_fished','people_fishing','bc_residents','non_residents','non_resident_aliens','angler_hours']);
-  SPECIES.forEach(function(x){head.push(x.id+'_caught');if(x.keep)head.push(x.id+'_retained')});
-  head=head.concat(['total_fish','fish_per_angler_hour','guide','guide_licence']);
-  var rows=[head];
-  function q(n,d){return d>0?Math.round(1000*n/d)/1000:''}
+  var head=['Date','River'].concat(GPS_ENABLED?['Latitude','Longitude','GPS accuracy (m)']:[]).concat(['Hours fished','People fishing','B.C. residents','Non-residents','Non-resident aliens','Angler-hours']);
+  SPECIES.forEach(function(x){head.push(x.name);if(x.keep)head.push(x.name+' retained')});
+  head=head.concat(['Total fish','CPUE (fish per angler-hour)','Guide','Guide licence']);
+  var rows=[head],tot=null,first=GPS_ENABLED?5:2,n=head.length;
   list.forEach(function(t){
     var g=t.gps;
-    var r=[t.date,riverOf(t.river).name].concat(GPS_ENABLED?[g?g.lat.toFixed(6):'',g?g.lon.toFixed(6):'',g&&g.acc?Math.round(g.acc):'']:[]).concat([t.hours,t.people,t.res.bc||0,t.res.nr||0,t.res.nra||0,Math.round(ah(t)*100)/100]);
-    SPECIES.forEach(function(x){r.push(t.c[x.id]||0);if(x.keep)r.push(t.k[x.id]||0)});
-    r=r.concat([totalCaught(t),q(totalCaught(t),ah(t)),settings.guide,settings.licence]);
+    var r=[t.date,riverOf(t.river).name].concat(GPS_ENABLED?[g?g.lat.toFixed(6):'',g?g.lon.toFixed(6):'',g&&g.acc?Math.round(g.acc):'']:[]).concat([t.hours,t.people,t.res.bc||0,t.res.nr||0,t.res.nra||0,r2(ah(t))]);
+    SPECIES.forEach(function(x){var c=t.c[x.id]||0,k=t.k[x.id]||0;r.push(c-k);if(x.keep)r.push(k)});
+    r=r.concat([totalCaught(t),cpue(totalCaught(t),ah(t)),settings.guide,settings.licence]);
     rows.push(r);
+    if(!tot)tot=r.map(function(){return ''});
+    for(var i=first;i<n-3;i++)tot[i]=(tot[i]||0)+r[i];
   });
+  if(tot){
+    tot[0]='Total';tot[1]=plural(list.length,'trip');
+    tot[first]=r2(tot[first]);tot[first+5]=r2(tot[first+5]);
+    tot[n-3]=cpue(tot[n-4],tot[first+5]);
+    rows.push(tot);
+  }
   return rows;
 }
 function exportAll(){
